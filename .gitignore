@@ -1,0 +1,54 @@
+﻿# ESP-IDF 构建输出
+build/
+bootloader/
+partition_table/
+*.bin
+*.elf
+*.map
+*.s
+*.d
+*.o
+*.a
+
+# 组件管理器生成的文件
+managed_components/
+dependencies.lock
+
+# IDE 和编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 编译生成的文件
+sdkconfig.old
+sdkconfig.bak
+
+# 日志文件
+*.log
+build/log/
+
+# 临时文件
+*.tmp
+*.temp
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ESP-IDF 特定
+/flash_args
+/flash_batch
+/flash_project_args
+*.flash
+*.partitions
+
+# 备份文件
+*.backup
+*.bak
+*~
+
