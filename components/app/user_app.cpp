@@ -32,14 +32,10 @@ static bool sdcardinitflag = 1;
 static bool adcinitflag = 1;
 static bool shtc3initflag = 1;
 static bool audiouiflag = 0;
-static bool whiteflag = 0;
 static bool touchflag = 0;
 static QueueHandle_t gpio_evt_queue = NULL;
 static uint8_t *audio_data_ptr = NULL;
 
-static lv_obj_t *temp_label = NULL;
-static lv_obj_t *temp_chart = NULL;
-static lv_chart_series_t *temp_series = NULL;
 static lv_timer_t *temp_timer = NULL;
 float max_temp = 0;
 float min_temp = 100;
@@ -51,9 +47,9 @@ static void temp_update_timer_cb(lv_timer_t *timer)
 
     pcf85063a_datetime_t current_time = {};
 
-    if (temp_chart && lv_obj_has_flag(temp_chart, LV_OBJ_FLAG_HIDDEN))
+    if (src_ui.screen && lv_obj_has_flag(src_ui.temp_chart, LV_OBJ_FLAG_HIDDEN))
     {
-        lv_obj_clear_flag(temp_chart, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(src_ui.temp_chart, LV_OBJ_FLAG_HIDDEN);
     }
 
     // int temp = 20 + (int)(esp_timer_get_time() % 21);
@@ -81,22 +77,22 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     pcf85063a_get_time_date(&pcf85063, &current_time);
     snprintf(buf, sizeof(buf), "%d<%d<%d°C %02d-%02d %02d:%02d", (int)max_temp, temp, (int)min_temp, current_time.month, current_time.day, current_time.hour, current_time.min);
 
-    if (temp_label)
+    if (src_ui.temp_label)
     {
-        if (lv_obj_has_flag(temp_label, LV_OBJ_FLAG_HIDDEN))
+        if (lv_obj_has_flag(src_ui.temp_label, LV_OBJ_FLAG_HIDDEN))
         {
-            lv_obj_clear_flag(temp_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(src_ui.temp_label, LV_OBJ_FLAG_HIDDEN);
         }
 
-        lv_label_set_text(temp_label, buf);
+        lv_label_set_text(src_ui.temp_label, buf);
     }
     temp -= TEMP_OFFSET;
     temp *= TEMP_SCALER;
 
-    if (temp_chart && temp_series)
+    if (src_ui.temp_chart && src_ui.temp_series)
     {
-        lv_chart_set_next_value(temp_chart, temp_series, temp);
-        lv_obj_invalidate(temp_chart);
+        lv_chart_set_next_value(src_ui.temp_chart, src_ui.temp_series, temp);
+        lv_obj_invalidate(src_ui.temp_chart);
     }
 }
 
@@ -105,7 +101,6 @@ void Lvgl_LoopTask(void *arg);
 void InitializeButtons(void); /* button 初始化 */
 void Button_LoopTask(void *arg);
 void Touch_LoppTask(void *arg);
-void Audio_LoppTask(void *arg);
 static void gpio_isr_handler(void *arg);
 void Touch_ISR_GPIO_Init();
 
@@ -144,50 +139,47 @@ void UserApp_Init()
     Codec_StartInit();
 }
 
+static void ShowOnlyContainer(int container_number)
+{
+    lv_obj_t *containers[5] = {
+        src_ui.screen_cont_1,
+        src_ui.screen_cont_2,
+        src_ui.screen_cont_3,
+        src_ui.screen_cont_4,
+        src_ui.temp_chart_container,
+    };
+
+    ESP_LOGI(TAG, "display container: %d", container_number);
+
+    // if (Lvgl_lock(-1))
+    {
+        for (int i = 0; i < 5; ++i)
+        {
+            if (containers[i] == NULL)
+            {
+                continue;
+            }
+            lv_obj_add_flag(containers[i], LV_OBJ_FLAG_HIDDEN);
+        }
+
+        if (container_number >= 1 && container_number <= 5)
+        {
+            if (containers[container_number - 1] != NULL)
+            {
+                lv_obj_remove_flag(containers[container_number - 1], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        
+        // Lvgl_unlock();
+    }
+}
+
 void UserUi_Init()
 {
     setup_factest_ui(&src_ui);
 
-    temp_chart = lv_chart_create(src_ui.screen);
-    lv_obj_set_size(temp_chart, 180, 120);
-    lv_obj_align(temp_chart, LV_ALIGN_TOP_MID, 0, 10);
-    lv_chart_set_type(temp_chart, LV_CHART_TYPE_LINE);
-    lv_chart_set_point_count(temp_chart, 100);
-    lv_chart_set_range(temp_chart, LV_CHART_AXIS_PRIMARY_Y, 10, 45);
-    // lv_chart_set_axis_tick(temp_chart, LV_CHART_AXIS_PRIMARY_Y, 5, 2, 5, 1, true, 0);
-    // lv_chart_set_axis_tick(temp_chart, LV_CHART_AXIS_PRIMARY_X, 10, 2, 5, 1, true, 0);
-    lv_obj_set_style_bg_color(temp_chart, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(temp_chart, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(temp_chart, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(temp_chart, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    /* 将连线的宽度设置为1像素（最小细线） */
-    lv_obj_set_style_line_width(temp_chart, 1, LV_PART_ITEMS);
-    lv_obj_set_style_width(temp_chart, 2, LV_PART_INDICATOR);
-    lv_obj_set_style_height(temp_chart, 2, LV_PART_INDICATOR);
-
-    lv_obj_set_style_radius(temp_chart, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_flag(temp_chart, LV_OBJ_FLAG_HIDDEN);
-
-    temp_series = lv_chart_add_series(temp_chart, lv_color_black(), LV_CHART_AXIS_PRIMARY_Y);
-    for (uint32_t i = 0; i < 100; i++)
-    {
-        lv_chart_set_next_value(temp_chart, temp_series, 23);
-    }
-
-    temp_label = lv_label_create(src_ui.screen);
-    lv_obj_set_pos(temp_label, 10, 170);
-    lv_obj_set_size(temp_label, 180, 20);
-    lv_label_set_text(temp_label, "Waiting 20s...");
-    // lv_obj_align(temp_label, LV_ALIGN_BOTTOM_LEFT, 0, -10);
-
-    // ====
-
-    src_ui.screen_label_temp_info = lv_label_create(src_ui.screen);
-    lv_obj_set_pos(src_ui.screen_label_temp_info, 10, 135);
-    lv_obj_set_size(src_ui.screen_label_temp_info, 180, 20);
-    // lv_label_set_text(src_ui.screen_label_temp_info, "temp info here to display yes here youa re hereyouu");
-    lv_label_set_long_mode(src_ui.screen_label_temp_info, LV_LABEL_LONG_WRAP);
+    // Show only container 1 after power on.
+    ShowOnlyContainer(1);
 
     pcf85063a_datetime_t current_time = {};
     pcf85063a_get_time_date(&pcf85063, &current_time);
@@ -195,7 +187,7 @@ void UserUi_Init()
     lv_label_set_text(src_ui.screen_label_temp_info, Lvgl_buffer);
 
     // temp_timer = lv_timer_create(temp_update_timer_cb, 1000, NULL);
-    temp_timer = lv_timer_create(temp_update_timer_cb, 200000, NULL);
+    temp_timer = lv_timer_create(temp_update_timer_cb, 10000, NULL);
     lv_timer_set_repeat_count(temp_timer, -1);
     temp_update_timer_cb(0);
 }
@@ -206,7 +198,6 @@ void UserApp_Start_Init()
     xTaskCreatePinnedToCore(Lvgl_LoopTask, "Lvgl_LoopTask", 5 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Button_LoopTask, "Button_LoopTask", 4 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Touch_LoppTask, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(Audio_LoppTask, "Audio_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
 }
 
 void Led_LoopTask(void *arg)
@@ -234,7 +225,6 @@ void Lvgl_LoopTask(void *arg)
     uint32_t shtc3_time = 0;
     uint32_t rtc_time = 0;
     uint32_t adc_time = 0;
-    float t, h;
     if (pcf85063initflag)
     {
         pcf85063a_datetime_t datatime = {};
@@ -245,20 +235,9 @@ void Lvgl_LoopTask(void *arg)
         datatime.min = 0;
         datatime.sec = 0;
         pcf85063a_set_time_date(&pcf85063, datatime);
-        if (Lvgl_lock(-1))
-        {
-            lv_label_set_text(src_ui.screen_label_1, "08");
-            lv_label_set_text(src_ui.screen_label_2, "00");
-            Lvgl_unlock();
-        }
     }
     if (0 == sdcardinitflag)
     {
-        if (Lvgl_lock(-1))
-        {
-            lv_label_set_text(src_ui.screen_label_5, "No Card");
-            Lvgl_unlock();
-        }
     }
     else
     {
@@ -268,242 +247,132 @@ void Lvgl_LoopTask(void *arg)
         Sdcard_ReadFile("/sdcard/sdcard.txt", sdcard_test2, NULL);
         if (!strcmp(sdcard_test1, sdcard_test2))
         {
-            lv_label_set_text(src_ui.screen_label_5, "passed");
+            // lv_label_set_text(src_ui.screen_label_5, "passed");
         }
         else
         {
-            lv_label_set_text(src_ui.screen_label_5, "failed");
+            // lv_label_set_text(src_ui.screen_label_5, "failed");
         }
     }
     if (1 == adcinitflag)
     {
         snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%d%%", Get_Batterylevel());
-        if (Lvgl_lock(-1))
-        {
-            lv_label_set_text(src_ui.screen_label_8, Lvgl_buffer);
-            Lvgl_unlock();
-        }
     }
     if (1 == shtc3initflag)
     {
-        Shtc3_ReadTempHumi(&t, &h);
-        if ((t != -1000) && (h != -1000))
-        {
-            snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%d°", (int)t);
-            if (Lvgl_lock(-1))
-            {
-                lv_label_set_text(src_ui.screen_label_3, Lvgl_buffer);
-                Lvgl_unlock();
-            }
-            snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%d%%", (int)h);
-            if (Lvgl_lock(-1))
-            {
-                lv_label_set_text(src_ui.screen_label_4, Lvgl_buffer);
-                Lvgl_unlock();
-            }
-        }
-        else
-        {
-            if (Lvgl_lock(-1))
-            {
-                lv_label_set_text(src_ui.screen_label_3, "N");
-                lv_label_set_text(src_ui.screen_label_4, "N");
-                Lvgl_unlock();
-            }
-        }
     }
     for (;;)
     {
-        if ((times - rtc_time) >= 60)
-        {
-            rtc_time = times;
-            if (pcf85063initflag)
-            {
-                pcf85063a_datetime_t current_time = {};
-                pcf85063a_get_time_date(&pcf85063, &current_time);
-                snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d", current_time.hour);
-                if (Lvgl_lock(-1))
-                {
-                    lv_label_set_text(src_ui.screen_label_1, Lvgl_buffer);
-                    Lvgl_unlock();
-                }
-                snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d", current_time.min);
-                if (Lvgl_lock(-1))
-                {
-                    lv_label_set_text(src_ui.screen_label_2, Lvgl_buffer);
-                    Lvgl_unlock();
-                }
-            }
-        }
-        if ((times - adc_time) >= 10)
-        {
-            adc_time = times;
-            snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%d%%", Get_Batterylevel());
-            if (Lvgl_lock(-1))
-            {
-                lv_label_set_text(src_ui.screen_label_8, Lvgl_buffer);
-                Lvgl_unlock();
-            }
-        }
-        if ((times - shtc3_time) >= 10)
-        {
-            shtc3_time = times;
-            Shtc3_ReadTempHumi(&t, &h);
-            if ((t != -1000) && (h != -1000))
-            {
-                snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%d°", (int)t);
-                if (Lvgl_lock(-1))
-                {
-                    lv_label_set_text(src_ui.screen_label_3, Lvgl_buffer);
-                    Lvgl_unlock();
-                }
-                snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%d%%", (int)h);
-                if (Lvgl_lock(-1))
-                {
-                    lv_label_set_text(src_ui.screen_label_4, Lvgl_buffer);
-                    Lvgl_unlock();
-                }
-            }
-            else
-            {
-                if (Lvgl_lock(-1))
-                {
-                    lv_label_set_text(src_ui.screen_label_3, "N");
-                    lv_label_set_text(src_ui.screen_label_4, "N");
-                    Lvgl_unlock();
-                }
-            }
-        }
         vTaskDelay(pdMS_TO_TICKS(1000));
-        times++;
     }
 }
 
 void InitializeButtons(void)
 {
     boot_button->OnClick([]()
-                         { xEventGroupSetBits(FacTestEventGroup, (0x10)); });
+                         {
+                             ESP_LOGI(TAG, "boot_button click");
+                             xEventGroupSetBits(FacTestEventGroup, (0x10)); });
+
+    boot_button->OnDoubleClick([]()
+                               {
+                                    ESP_LOGI(TAG, "boot_button double click");
+                                    xEventGroupSetBits(FacTestEventGroup, (0x20)); });
 
     boot_button->OnLongPress([]()
-                             { xEventGroupSetBits(FacTestEventGroup, (0x04)); });
-
-    power_button->OnLongPress([]()
-                              { xEventGroupSetBits(FacTestEventGroup, (0x01)); });
+                             {
+                                 ESP_LOGI(TAG, "boot_button long press");
+                                 xEventGroupSetBits(FacTestEventGroup, (0x40)); });
 
     power_button->OnClick([]()
-                          { xEventGroupSetBits(FacTestEventGroup, (0x02)); });
+                          {
+                              ESP_LOGI(TAG, "power_button click");
+                              xEventGroupSetBits(FacTestEventGroup, (0x01)); });
 
     power_button->OnDoubleClick([]()
-                                { xEventGroupSetBits(FacTestEventGroup, (0x08)); });
+                                {
+                                    ESP_LOGI(TAG, "power_button double click");
+                                    xEventGroupSetBits(FacTestEventGroup, (0x02)); });
+
+    power_button->OnLongPress([]()
+                              {
+                                  ESP_LOGI(TAG, "power_button long press");
+                                  xEventGroupSetBits(FacTestEventGroup, (0x04)); });
+}
+
+void ButtonEvent_PowerKeyClick(void)
+{
+    if (0 == audiouiflag)
+    {
+        audiouiflag = 1;
+        ShowOnlyContainer(2);
+    }
+    else
+    {
+        audiouiflag = 0;
+        ShowOnlyContainer(1);
+    }
+}
+
+void ButtonEvent_PowerKeyDoubleClick(void)
+{
+    static uint16_t click_count = 0;
+    click_count++;
+    ShowOnlyContainer(click_count % 5 + 1);
+}
+
+void ButtonEvent_PowerKeyLongPress(void)
+{
+    BoardPower_VBAT_OFF();
+}
+
+void ButtonEvent_BootKeyClick(void)
+{
+    // power_button double click
+    ShowOnlyContainer(5);
+}
+
+void ButtonEvent_BootKeyDoubleClick(void)
+{
+}
+
+void ButtonEvent_BootKeyLongPress(void)
+{
 }
 
 void Button_LoopTask(void *arg)
 {
     for (;;)
     {
-        EventBits_t even = xEventGroupWaitBits(FacTestEventGroup, (0x01) | (0x02) | (0x04) | (0x08), pdTRUE, pdFALSE, portMAX_DELAY);
+        EventBits_t even = xEventGroupWaitBits(FacTestEventGroup, (0x01) | (0x02) | (0x04) | (0x10) | (0x20) | (0x40), pdTRUE, pdFALSE, portMAX_DELAY);
         if (even & 0x01)
-        { // 长按PWR关机
-            if (Lvgl_lock(-1))
-            {
-                lv_label_set_text(src_ui.screen_label_9, "OFF");
-                Lvgl_unlock();
-            }
-            BoardPower_VBAT_OFF();
+        {
+            ButtonEvent_PowerKeyClick();
         }
         if (even & 0x02)
-        { // 单击PWR
-            if (0 == audiouiflag)
-            {
-                audiouiflag = 1;
-                if (Lvgl_lock(-1))
-                {
-                    lv_obj_remove_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-                    Lvgl_unlock();
-                }
-            }
-            else
-            {
-                audiouiflag = 0;
-                if (Lvgl_lock(-1))
-                {
-                    lv_obj_remove_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-                    Lvgl_unlock();
-                }
-            }
+        {
+            ButtonEvent_PowerKeyDoubleClick();
         }
         if (even & 0x04)
-        { // 单击PWR
-            if (0 == whiteflag)
-            {
-                whiteflag = 1;
-                if (Lvgl_lock(-1))
-                {
-                    lv_obj_remove_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-                    Lvgl_unlock();
-                }
-            }
-            else
-            {
-                whiteflag = 0;
-                if (Lvgl_lock(-1))
-                {
-                    lv_obj_remove_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-                    Lvgl_unlock();
-                }
-            }
+        {
+            ButtonEvent_PowerKeyLongPress();
         }
-        if (even & 0x08)
-        { // 单击PWR
-            // if (0 == touchflag)
-            // {
-            //     touchflag = 1;
-            //     if (Lvgl_lock(-1))
-            //     {
-            //         lv_obj_remove_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-            //         lv_obj_add_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-            //         lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-            //         lv_obj_add_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
-            //         Lvgl_unlock();
-            //     }
-            // }
-            // else
-            // {
-            //     touchflag = 0;
-            //     if (Lvgl_lock(-1))
-            //     {
-            //         lv_obj_remove_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-            //         lv_obj_add_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
-            //         lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-            //         lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-            //         Lvgl_unlock();
-            //     }
-            // }
 
-            if (Lvgl_lock(-1))
-            {
-                lv_obj_add_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-
-                Lvgl_unlock();
-            }
+        if (even & 0x10)
+        {
+            ButtonEvent_BootKeyClick();
+        }
+        if (even & 0x20)
+        {
+            ButtonEvent_BootKeyDoubleClick();
+        }
+        if (even & 0x40)
+        {
+            ButtonEvent_BootKeyLongPress();
         }
     }
 }
+
 
 void Touch_LoppTask(void *arg)
 {
@@ -519,6 +388,7 @@ void Touch_LoppTask(void *arg)
                 {
                     if (x < 80 && y < 80)
                     {
+                        ESP_LOGI(TAG, "Touch button event: Button 1 clicked at (%d,%d)", x, y);
                         if (Lvgl_lock(-1))
                         {
                             lv_label_set_text(src_ui.screen_label_23, "Button 1 was clicked");
@@ -527,6 +397,7 @@ void Touch_LoppTask(void *arg)
                     }
                     else if (x < 80 && y < 198 && y >= 118)
                     {
+                        ESP_LOGI(TAG, "Touch button event: Button 3 clicked at (%d,%d)", x, y);
                         if (Lvgl_lock(-1))
                         {
                             lv_label_set_text(src_ui.screen_label_23, "Button 3 was clicked");
@@ -535,6 +406,7 @@ void Touch_LoppTask(void *arg)
                     }
                     else if (x >= 119 && x < 199 && y < 80)
                     {
+                        ESP_LOGI(TAG, "Touch button event: Button 2 clicked at (%d,%d)", x, y);
                         if (Lvgl_lock(-1))
                         {
                             lv_label_set_text(src_ui.screen_label_23, "Button 2 was clicked");
@@ -543,6 +415,7 @@ void Touch_LoppTask(void *arg)
                     }
                     else if (x >= 119 && x < 199 && y >= 118 && y < 198)
                     {
+                        ESP_LOGI(TAG, "Touch button event: Button 4 clicked at (%d,%d)", x, y);
                         if (Lvgl_lock(-1))
                         {
                             lv_label_set_text(src_ui.screen_label_23, "Button 4 was clicked");
