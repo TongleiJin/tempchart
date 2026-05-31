@@ -103,22 +103,26 @@ void setup_scr_screen(lv_factest_ui *ui)
     lv_obj_set_style_bg_grad_dir(ui->screen, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
     
     // 容器 1：欢迎信息
-    ui->screen_cont_1 = create_base_container(ui->screen, 0, 0, 200, 200, false);
+    ui->container_home = create_base_container(ui->screen, 0, 0, 200, 200, false);
     
-    ui->label_overall_info = lv_label_create(ui->screen_cont_1);
+    ui->label_overall_info = lv_label_create(ui->container_home);
     lv_obj_set_pos(ui->label_overall_info, 10, 30);
     lv_obj_set_size(ui->label_overall_info, 180, 140);
     lv_label_set_long_mode(ui->label_overall_info, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(ui->label_overall_info,
-        "Welcome!\n\nBOOT: show max/min\nPOWER: next page\nLONG POWER: power off\nDOUBLE POWER: show chart\n\nTemp sample: 3s");
+    lv_label_set_text(ui->label_overall_info, "Starting...");
     lv_obj_set_style_text_align(ui->label_overall_info, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_style_text_color(ui->label_overall_info, lv_color_hex(0x000000), LV_PART_MAIN);
     set_label_style(ui->label_overall_info, lv_color_hex(0x000000), 14);
+
+    ui->label_homeClock = lv_label_create(ui->container_home);
+    lv_label_set_text(ui->label_homeClock, "");
+    set_label_style(ui->label_homeClock, lv_color_hex(0x000000), 12);
+    lv_obj_align(ui->label_homeClock, LV_ALIGN_TOP_RIGHT, -6, 4);
     
     // 容器 2：图片显示
-    ui->screen_cont_2 = create_base_container(ui->screen, 0, 0, 200, 200, true);
+    ui->container_image = create_base_container(ui->screen, 0, 0, 200, 200, true);
     
-    ui->screen_img_5 = lv_image_create(ui->screen_cont_2);
+    ui->screen_img_5 = lv_image_create(ui->container_image);
     lv_obj_set_pos(ui->screen_img_5, 0, 0);
     lv_obj_set_size(ui->screen_img_5, 200, 200);
     lv_obj_add_flag(ui->screen_img_5, LV_OBJ_FLAG_CLICKABLE);
@@ -129,38 +133,30 @@ void setup_scr_screen(lv_factest_ui *ui)
     lv_obj_set_style_image_opa(ui->screen_img_5, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
     
     // 容器 3：4个按钮
-    ui->screen_cont_3 = create_base_container(ui->screen, 0, 0, 200, 200, true);
+    ui->container_touchButton = create_base_container(ui->screen, 0, 0, 200, 200, true);
     
     // 按钮标签
-    ui->screen_label_23 = lv_label_create(ui->screen_cont_3);
-    lv_obj_set_pos(ui->screen_label_23, 5, 86);
-    lv_obj_set_size(ui->screen_label_23, 189, 25);
-    lv_label_set_text(ui->screen_label_23, "");
-    lv_label_set_long_mode(ui->screen_label_23, LV_LABEL_LONG_WRAP);
-    set_label_style(ui->screen_label_23, lv_color_hex(0x000000), 17);
-    lv_obj_set_style_text_align(ui->screen_label_23, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN|LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_top(ui->screen_label_23, 3, LV_PART_MAIN|LV_STATE_DEFAULT);
+    ui->label_touchEvent = lv_label_create(ui->container_touchButton);
+    lv_obj_set_pos(ui->label_touchEvent, 5, 86);
+    lv_obj_set_size(ui->label_touchEvent, 189, 25);
+    lv_label_set_text(ui->label_touchEvent, "");
+    lv_label_set_long_mode(ui->label_touchEvent, LV_LABEL_LONG_WRAP);
+    set_label_style(ui->label_touchEvent, lv_color_hex(0x000000), 17);
+    lv_obj_set_style_text_align(ui->label_touchEvent, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->label_touchEvent, 3, LV_PART_MAIN|LV_STATE_DEFAULT);
     
     // 创建4个按钮
-    create_button(ui->screen_cont_3, 0, 0, 80, 80, "NEXT");
-    create_button(ui->screen_cont_3, 119, 0, 80, 80, "GO");
-    create_button(ui->screen_cont_3, 0, 118, 80, 80, "MORE");
-    create_button(ui->screen_cont_3, 119, 118, 80, 80, "CANCEL");
+    create_button(ui->container_touchButton, 0, 0, 80, 80, "NEXT");
+    create_button(ui->container_touchButton, 119, 0, 80, 80, "GO");
+    create_button(ui->container_touchButton, 0, 118, 80, 80, "MORE");
+    create_button(ui->container_touchButton, 119, 118, 80, 80, "CANCEL");
     
     // 温度图表容器
-    // ui->temp_chart_container = lv_obj_create(ui->screen);
-    ui->temp_chart_container = create_base_container(ui->screen, 0, 0, 200, 190, true);
-    // lv_obj_set_size(ui->temp_chart_container, 200, 190);
-    // lv_obj_set_pos(ui->temp_chart_container, 0, 0);
-    // lv_obj_set_scrollbar_mode(ui->temp_chart_container, LV_SCROLLBAR_MODE_OFF);
-    // lv_obj_set_style_bg_opa(ui->temp_chart_container, 0, LV_PART_MAIN);
-    // lv_obj_set_style_bg_color(ui->temp_chart_container, lv_color_hex(0xffffff), LV_PART_MAIN);
-    // lv_obj_set_style_border_width(ui->temp_chart_container, 0, LV_PART_MAIN);
-    // lv_obj_set_style_pad_all(ui->temp_chart_container, 0, LV_PART_MAIN);
-    // lv_obj_set_style_shadow_width(ui->temp_chart_container, 0, LV_PART_MAIN);
+    // ui->container_tempChart = lv_obj_create(ui->screen);
+    ui->container_tempChart = create_base_container(ui->screen, 0, 0, 200, 190, true);
     
     // 图表
-    ui->temp_chart = lv_chart_create(ui->temp_chart_container);
+    ui->temp_chart = lv_chart_create(ui->container_tempChart);
     lv_obj_set_size(ui->temp_chart, 180, 120);
     lv_obj_align(ui->temp_chart, LV_ALIGN_TOP_MID, 0, 10);
     lv_chart_set_type(ui->temp_chart, LV_CHART_TYPE_LINE);
@@ -181,18 +177,15 @@ void setup_scr_screen(lv_factest_ui *ui)
         lv_chart_set_next_value(ui->temp_chart, ui->temp_series, 23);
     }
     
-        ui->temp_label = lv_label_create(ui->temp_chart_container);
-    lv_obj_set_pos(ui->temp_label, 10, 170);
-    lv_obj_set_size(ui->temp_label, 180, 20);
-    lv_label_set_text(ui->temp_label, "Waiting 20s...");
+    ui->lable_tempStatics = lv_label_create(ui->container_tempChart);
+    lv_obj_set_pos(ui->lable_tempStatics, 10, 170);
+    lv_obj_set_size(ui->lable_tempStatics, 180, 20);
+    lv_label_set_text(ui->lable_tempStatics, "Waiting 20s...");
 
-    // ====
-
-    ui->screen_label_temp_info = lv_label_create(ui->temp_chart_container);
-    lv_obj_set_pos(ui->screen_label_temp_info, 10, 135);
-    lv_obj_set_size(ui->screen_label_temp_info, 180, 20);
-    // lv_label_set_text(ui->screen_label_temp_info, "temp info here to display yes here youa re hereyouu");
-    lv_label_set_long_mode(ui->screen_label_temp_info, LV_LABEL_LONG_WRAP);
+    ui->label_startTime = lv_label_create(ui->container_tempChart);
+    lv_obj_set_pos(ui->label_startTime, 10, 135);
+    lv_obj_set_size(ui->label_startTime, 180, 20);
+    lv_label_set_long_mode(ui->label_startTime, LV_LABEL_LONG_WRAP);
     
     // 更新布局
     lv_obj_update_layout(ui->screen);

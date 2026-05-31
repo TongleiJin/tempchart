@@ -36,10 +36,12 @@ static float max_temp = 0;
 static float min_temp = 100;
 
 static lv_timer_t *temp_timer = NULL;
-static const uint32_t temp_period_list[] = {2000, 20000, 60000, 300000};
+static lv_timer_t *time_timer = NULL;
+static const uint32_t temp_period_list[] = {3000, 20000, 60000, 300000};
 static const size_t temp_period_count = sizeof(temp_period_list) / sizeof(temp_period_list[0]);
-static size_t temp_period_selected_index = 2; // default selected 3000ms
-static size_t temp_period_active_index = 2;   // default active 3000ms
+static size_t temp_period_selected_index = 0; // default selected 3000ms
+static size_t temp_period_active_index = 0;   // default active 3000ms
+static uint32_t temp_sample_count = 0;
 
 #define MAX_TEMP_QUEUE_SIZE 100
 
@@ -79,6 +81,29 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     if (xQueueSend(xTempDataQueue, &record, 0) != pdPASS)
     {
         ESP_LOGW(TAG, "Temperature queue is full, dropping data");
+    }
+    else
+    {
+        temp_sample_count++;
+        if (src_ui.label_overall_info && !lv_obj_has_flag(src_ui.container_home, LV_OBJ_FLAG_HIDDEN))
+        {
+            UpdateMainInfoLabel();
+        }
+    }
+
+    ESP_LOGI(TAG, "temperature updated: %ld", temp_sample_count);
+}
+
+static void time_update_timer_cb(lv_timer_t *timer)
+{
+    pcf85063a_datetime_t current_time = {};
+    pcf85063a_get_time_date(&pcf85063, &current_time);
+
+    /* Only update the on-screen time when container 1 is visible */
+    if (!lv_obj_has_flag(src_ui.container_home, LV_OBJ_FLAG_HIDDEN) && src_ui.label_homeClock)
+    {
+        snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d:%02d:%02d", current_time.hour, current_time.min, current_time.sec);
+        lv_label_set_text(src_ui.label_homeClock, Lvgl_buffer);
     }
 }
 
@@ -123,10 +148,10 @@ void UserApp_Init()
 static void ShowOnlyContainer(int container_number)
 {
     lv_obj_t *containers[4] = {
-        src_ui.screen_cont_1,
-        src_ui.screen_cont_2,
-        src_ui.screen_cont_3,
-        src_ui.temp_chart_container,
+        src_ui.container_home,
+        src_ui.container_image,
+        src_ui.container_touchButton,
+        src_ui.container_tempChart,
     };
 
     ESP_LOGI(TAG, "container: %d", container_number);
@@ -135,10 +160,10 @@ static void ShowOnlyContainer(int container_number)
     {
 
         // make all containers hidden first
-        lv_obj_add_flag(src_ui.temp_chart_container, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(src_ui.container_tempChart, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(src_ui.container_home, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(src_ui.container_image, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(src_ui.container_touchButton, LV_OBJ_FLAG_HIDDEN);
         if (container_number >= 1 && container_number <= 4)
         {
             lv_obj_remove_flag(containers[container_number - 1], LV_OBJ_FLAG_HIDDEN);
@@ -162,18 +187,18 @@ void UpdateMainInfoLabel(void)
     {
         return;
     }
-
     uint32_t active_s = temp_period_list[temp_period_active_index] / 1000;
     char buf[140];
     snprintf(buf, sizeof(buf),
-             "Welcome!\n\nBOOT: show max/min\nPOWER: next page\nLONG POWER: power off\nDOUBLE POWER: show chart\n\nTemp sample: %lus",
-             active_s);
+             "BOOT: show max/min\nPOWER: next page\nLONG POWER: power off\nDOUBLE POWER: show chart\n\nTemp sample: %lus\nCount: %lu",
+             active_s,
+             temp_sample_count);
     lv_label_set_text(src_ui.label_overall_info, buf);
 }
 
 static void UpdateTouchPeriodStatusLabel(const char *action)
 {
-    if (!src_ui.screen_label_23)
+    if (!src_ui.label_touchEvent)
     {
         return;
     }
@@ -191,7 +216,7 @@ static void UpdateTouchPeriodStatusLabel(const char *action)
         snprintf(buf, sizeof(buf), "Sel:%lus Act:%lus", selected_s, active_s);
     }
 
-    lv_label_set_text(src_ui.screen_label_23, buf);
+    lv_label_set_text(src_ui.label_touchEvent, buf);
 }
 
 static void TouchContainer_NextPeriod(void)
@@ -233,18 +258,16 @@ void UserUi_Init()
     // Show only container 1 after power on.
     ShowOnlyContainer(1);
 
-    pcf85063a_datetime_t current_time = {};
-    pcf85063a_get_time_date(&pcf85063, &current_time);
-    snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d-%02d-%02d %02d:%02d", current_time.year, current_time.month, current_time.day, current_time.hour, current_time.min);
-    lv_label_set_text(src_ui.screen_label_temp_info, Lvgl_buffer);
-
     UpdateMainInfoLabel();
     UpdateTouchPeriodStatusLabel(NULL);
 
     temp_timer = lv_timer_create(temp_update_timer_cb, temp_period_list[temp_period_active_index], NULL);
     lv_timer_set_repeat_count(temp_timer, -1);
     temp_update_timer_cb(0);
-    // lv_timer_set_period(temp_update_timer_cb, new_period_ms);
+    /* create 1s timer to update time label when container 1 is shown */
+    time_timer = lv_timer_create(time_update_timer_cb, 1000, NULL);
+    lv_timer_set_repeat_count(time_timer, -1);
+    time_update_timer_cb(0);
 }
 
 void UserApp_Start_Init()
@@ -276,21 +299,34 @@ void Led_LoopTask(void *arg)
 
 void Lvgl_LoopTask(void *arg)
 {
+    const uint16_t TEMP_OFFSET = 20;
+    const uint16_t TEMP_SCALER = 3;
     uint32_t times = 0;
-    // uint32_t shtc3_time = 0;
-    // uint32_t rtc_time = 0;
-    // uint32_t adc_time = 0;
     temp_record_t temp_record[MAX_TEMP_QUEUE_SIZE];
     temp_record_t tmpTemp;
+    float temp = 0;
 
-    pcf85063a_datetime_t datatime = {};
-    datatime.year = 2026;
-    datatime.month = 1;
-    datatime.day = 1;
-    datatime.hour = 8;
-    datatime.min = 0;
-    datatime.sec = 0;
-    pcf85063a_set_time_date(&pcf85063, datatime);
+    // use current time as system time
+    // pcf85063a_datetime_t datatime = {};
+    // datatime.year = 2026;
+    // datatime.month = 5;
+    // datatime.day = 31;
+    // datatime.hour = 15;
+    // datatime.min = 54;
+    // datatime.sec = 0;
+    // pcf85063a_set_time_date(&pcf85063, datatime);
+
+    
+    pcf85063a_datetime_t current_time = {};
+    pcf85063a_get_time_date(&pcf85063, &current_time);
+
+    // update the first sample timestamp label
+    if (src_ui.label_startTime)
+    {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "FS: %02d-%02d %02d:%02d:%02d", current_time.month, current_time.day, current_time.hour, current_time.min, current_time.sec);
+        lv_label_set_text(src_ui.label_startTime, buf);
+    }
 
     while (1)
     {
@@ -318,7 +354,9 @@ void Lvgl_LoopTask(void *arg)
         {
             for (int i = 0; i < MAX_TEMP_QUEUE_SIZE; ++i)
             {
-                lv_chart_set_next_value(src_ui.temp_chart, src_ui.temp_series, temp_record[i].temperature);
+                temp = temp_record[i].temperature;
+                temp = (temp - TEMP_OFFSET) * TEMP_SCALER;
+                lv_chart_set_next_value(src_ui.temp_chart, src_ui.temp_series, temp);
 
                 if (temp_record[i].temperature > max_temp)
                 {
@@ -335,26 +373,24 @@ void Lvgl_LoopTask(void *arg)
             }
 
             // if the container 1 is showing, then update the label text, otherwise do nothing.
-            if (!lv_obj_has_flag(src_ui.temp_chart_container, LV_OBJ_FLAG_HIDDEN))
+            if (!lv_obj_has_flag(src_ui.container_tempChart, LV_OBJ_FLAG_HIDDEN))
             {
                 lv_obj_invalidate(src_ui.temp_chart);
-                int temp = (int)tmpTemp.temperature;
                 char buf[32];
-                snprintf(buf, sizeof(buf), "%d<%d<%d°C %02d-%02d %02d:%02d", (int)max_temp, temp, (int)min_temp, tmpTemp.ts.month, tmpTemp.ts.day, tmpTemp.ts.hour, tmpTemp.ts.minute);
+                snprintf(buf, sizeof(buf), "%.1f<%.1f<%.1f°C %02d:%02d:%02d", max_temp, tmpTemp.temperature, min_temp, tmpTemp.ts.hour, tmpTemp.ts.minute, tmpTemp.ts.second);
 
-                if (src_ui.temp_label)
+                if (src_ui.lable_tempStatics)
                 {
-                    lv_label_set_text(src_ui.temp_label, buf);
+                    lv_label_set_text(src_ui.lable_tempStatics, buf);
                 }
                 // print log for debug
-                ESP_LOGI(TAG, "Temperature updated");
+                ESP_LOGI(TAG, "chart updated");
             }
             else // redraw the chart of temperature data
             {
 
-                ESP_LOGI(TAG, "temperature chart is hidden");
+                ESP_LOGI(TAG, "chart is hidden");
             }
-
             Lvgl_unlock();
         }
     }
@@ -414,7 +450,7 @@ void ButtonEvent_PowerKeyLongPress(void)
 void ButtonEvent_BootKeyClick(void)
 {
     // if being container 1 showing, then update the label text, otherwise do nothing.
-    if (lv_obj_has_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN))
+    if (lv_obj_has_flag(src_ui.container_home, LV_OBJ_FLAG_HIDDEN))
     {
         return;
     }
@@ -518,12 +554,13 @@ void Touch_LoopTask(void *arg)
                             Lvgl_unlock();
                         }
                     }
-                    ESP_LOGW("touch", "(%d,%d)", x, y);
+                    // ESP_LOGW("touch", "(%d,%d)", x, y);
                 }
             }
         }
     }
 }
+
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {

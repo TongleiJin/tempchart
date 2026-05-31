@@ -11,13 +11,16 @@ extern "C"
 	{
 		lv_obj_t *screen;
 		bool screen_del;
-		lv_obj_t *screen_cont_1;
+
+		lv_obj_t *container_home;
 		lv_obj_t *label_overall_info;
-		lv_obj_t *screen_label_temp_info;
-		lv_obj_t *screen_cont_2;
+		lv_obj_t *label_homeClock;
+
+		lv_obj_t *container_image;
 		lv_obj_t *screen_img_5;
-		lv_obj_t *screen_cont_3;
-		lv_obj_t *screen_label_23;
+
+		lv_obj_t *container_touchButton;
+		lv_obj_t *label_touchEvent;
 		lv_obj_t *screen_btn_4;
 		lv_obj_t *screen_btn_4_label;
 		lv_obj_t *screen_btn_3;
@@ -27,9 +30,10 @@ extern "C"
 		lv_obj_t *screen_btn_1;
 		lv_obj_t *screen_btn_1_label;
 
-		lv_obj_t *temp_label;
+		lv_obj_t *container_tempChart;
+		lv_obj_t *label_startTime;
+		lv_obj_t *lable_tempStatics;
 		lv_obj_t *temp_chart;
-		lv_obj_t *temp_chart_container;
 		lv_chart_series_t *temp_series;
 		
 	} lv_factest_ui;
