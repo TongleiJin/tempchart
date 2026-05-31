@@ -26,7 +26,6 @@ extern "C"
 		lv_obj_t *screen_btn_2_label;
 		lv_obj_t *screen_btn_1;
 		lv_obj_t *screen_btn_1_label;
-		lv_obj_t *screen_cont_4;
 
 		lv_obj_t *temp_label;
 		lv_obj_t *temp_chart;

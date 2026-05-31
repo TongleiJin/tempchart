@@ -17,7 +17,6 @@
 #include "port_codec.h"
 #include "esp_timer.h"
 
-
 #define TAG "user_app"
 
 static I2cMasterBus *i2c_bus = NULL;
@@ -29,11 +28,6 @@ static Button *boot_button = nullptr;
 static Button *power_button = nullptr;
 static EventGroupHandle_t FacTestEventGroup = NULL; // 事件组句柄
 static char Lvgl_buffer[60];
-static bool sdcardinitflag = 1;
-static bool adcinitflag = 1;
-static bool shtc3initflag = 1;
-static bool audiouiflag = 0;
-static bool touchflag = 0;
 static QueueHandle_t gpio_evt_queue = NULL;
 static uint8_t *audio_data_ptr = NULL;
 QueueHandle_t xTempDataQueue = NULL;
@@ -42,16 +36,25 @@ static float max_temp = 0;
 static float min_temp = 100;
 
 static lv_timer_t *temp_timer = NULL;
+static const uint32_t temp_period_list[] = {2000, 20000, 60000, 300000};
+static const size_t temp_period_count = sizeof(temp_period_list) / sizeof(temp_period_list[0]);
+static size_t temp_period_selected_index = 2; // default selected 3000ms
+static size_t temp_period_active_index = 2;   // default active 3000ms
 
 #define MAX_TEMP_QUEUE_SIZE 100
 
-
+static void UpdateMainInfoLabel(void);
+static void UpdateTouchPeriodStatusLabel(const char *action);
+void Led_LoopTask(void *arg);
+void Lvgl_LoopTask(void *arg);
+void InitializeButtons(void); /* button 初始化 */
+void Button_LoopTask(void *arg);
+void Touch_LoopTask(void *arg);
+static void gpio_isr_handler(void *arg);
+void Touch_ISR_GPIO_Init();
 
 static void temp_update_timer_cb(lv_timer_t *timer)
 {
-    const uint16_t TEMP_OFFSET = 20;
-    const uint16_t TEMP_SCALER = 3;
-
     pcf85063a_datetime_t current_time = {};
     float t, h;
     Shtc3_ReadTempHumi(&t, &h);
@@ -70,8 +73,7 @@ static void temp_update_timer_cb(lv_timer_t *timer)
             .hour = current_time.hour,
             .minute = current_time.min,
             .second = current_time.sec,
-        }
-    };
+        }};
 
     // send to temp queue
     if (xQueueSend(xTempDataQueue, &record, 0) != pdPASS)
@@ -79,15 +81,6 @@ static void temp_update_timer_cb(lv_timer_t *timer)
         ESP_LOGW(TAG, "Temperature queue is full, dropping data");
     }
 }
-
-void Led_LoopTask(void *arg);
-void Lvgl_LoopTask(void *arg);
-void InitializeButtons(void); /* button 初始化 */
-void Button_LoopTask(void *arg);
-void Touch_LoopTask(void *arg);
-static void gpio_isr_handler(void *arg);
-void Touch_ISR_GPIO_Init();
-
 
 void UserApp_Init()
 {
@@ -117,48 +110,121 @@ void UserApp_Init()
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     InitializeButtons();
-    sdcardinitflag = Sdcard_Init();
     BoardAdc_Init();
     Shtc3_Init(i2c_bus);
     Touch_ISR_GPIO_Init();
     Codec_StartInit();
-    
+
     // initialize temperature queue
     xTempDataQueue = xQueueCreate(MAX_TEMP_QUEUE_SIZE, sizeof(temp_record_t));
     assert(xTempDataQueue);
 }
 
-
 static void ShowOnlyContainer(int container_number)
 {
-    lv_obj_t *containers[5] = {
+    lv_obj_t *containers[4] = {
         src_ui.screen_cont_1,
         src_ui.screen_cont_2,
         src_ui.screen_cont_3,
-        src_ui.screen_cont_4,
         src_ui.temp_chart_container,
     };
 
     ESP_LOGI(TAG, "container: %d", container_number);
 
-    // if (Lvgl_lock(portMAX_DELAY))
+    if (Lvgl_lock(portMAX_DELAY))
     {
+
         // make all containers hidden first
         lv_obj_add_flag(src_ui.temp_chart_container, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
-
-        if (container_number >= 1 && container_number <= 5)
+        if (container_number >= 1 && container_number <= 4)
         {
             lv_obj_remove_flag(containers[container_number - 1], LV_OBJ_FLAG_HIDDEN);
         }
-        
-        // Lvgl_unlock();  // 操作完成后释放锁
+
+        if (container_number == 1)
+        {
+            UpdateMainInfoLabel();
+        }
+        else if (container_number == 3)
+        {
+            UpdateTouchPeriodStatusLabel(NULL);
+        }
+        Lvgl_unlock();
     }
 }
 
+void UpdateMainInfoLabel(void)
+{
+    if (!src_ui.label_overall_info)
+    {
+        return;
+    }
+
+    uint32_t active_s = temp_period_list[temp_period_active_index] / 1000;
+    char buf[140];
+    snprintf(buf, sizeof(buf),
+             "Welcome!\n\nBOOT: show max/min\nPOWER: next page\nLONG POWER: power off\nDOUBLE POWER: show chart\n\nTemp sample: %lus",
+             active_s);
+    lv_label_set_text(src_ui.label_overall_info, buf);
+}
+
+static void UpdateTouchPeriodStatusLabel(const char *action)
+{
+    if (!src_ui.screen_label_23)
+    {
+        return;
+    }
+
+    uint32_t selected_s = temp_period_list[temp_period_selected_index] / 1000;
+    uint32_t active_s = temp_period_list[temp_period_active_index] / 1000;
+    char buf[80];
+
+    if (action)
+    {
+        snprintf(buf, sizeof(buf), "%s | Sel:%lus Act:%lus", action, selected_s, active_s);
+    }
+    else
+    {
+        snprintf(buf, sizeof(buf), "Sel:%lus Act:%lus", selected_s, active_s);
+    }
+
+    lv_label_set_text(src_ui.screen_label_23, buf);
+}
+
+static void TouchContainer_NextPeriod(void)
+{
+    temp_period_selected_index = (temp_period_selected_index + 1) % temp_period_count;
+    UpdateTouchPeriodStatusLabel("Next");
+}
+
+static void TouchContainer_ActivatePeriod(void)
+{
+    temp_period_active_index = temp_period_selected_index;
+    if (temp_timer)
+    {
+        lv_timer_set_period(temp_timer, temp_period_list[temp_period_active_index]);
+        UpdateTouchPeriodStatusLabel("Go");
+    }
+    else
+    {
+        UpdateTouchPeriodStatusLabel("No Timer");
+    }
+    UpdateMainInfoLabel();
+}
+
+static void TouchContainer_CancelSelection(void)
+{
+    temp_period_selected_index = temp_period_active_index;
+    UpdateTouchPeriodStatusLabel("Cancel");
+}
+
+static void TouchContainer_MoreSetting(void)
+{
+    UpdateTouchPeriodStatusLabel("More");
+}
 
 void UserUi_Init()
 {
@@ -172,13 +238,14 @@ void UserUi_Init()
     snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d-%02d-%02d %02d:%02d", current_time.year, current_time.month, current_time.day, current_time.hour, current_time.min);
     lv_label_set_text(src_ui.screen_label_temp_info, Lvgl_buffer);
 
-    // temp_timer = lv_timer_create(temp_update_timer_cb, 1000, NULL);
-    temp_timer = lv_timer_create(temp_update_timer_cb, 3000, NULL);
+    UpdateMainInfoLabel();
+    UpdateTouchPeriodStatusLabel(NULL);
+
+    temp_timer = lv_timer_create(temp_update_timer_cb, temp_period_list[temp_period_active_index], NULL);
     lv_timer_set_repeat_count(temp_timer, -1);
     temp_update_timer_cb(0);
+    // lv_timer_set_period(temp_update_timer_cb, new_period_ms);
 }
-
-
 
 void UserApp_Start_Init()
 {
@@ -187,7 +254,6 @@ void UserApp_Start_Init()
     xTaskCreatePinnedToCore(Button_LoopTask, "Button_LoopTask", 4 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Touch_LoopTask, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
 }
-
 
 void Led_LoopTask(void *arg)
 {
@@ -208,14 +274,12 @@ void Led_LoopTask(void *arg)
     }
 }
 
-
-
 void Lvgl_LoopTask(void *arg)
 {
     uint32_t times = 0;
-    uint32_t shtc3_time = 0;
-    uint32_t rtc_time = 0;
-    uint32_t adc_time = 0;
+    // uint32_t shtc3_time = 0;
+    // uint32_t rtc_time = 0;
+    // uint32_t adc_time = 0;
     temp_record_t temp_record[MAX_TEMP_QUEUE_SIZE];
     temp_record_t tmpTemp;
 
@@ -329,18 +393,17 @@ void InitializeButtons(void)
                                   xEventGroupSetBits(FacTestEventGroup, (0x04)); });
 }
 
-
-
 void ButtonEvent_PowerKeyClick(void)
 {
     static uint16_t click_count = 0;
     click_count++;
-    ShowOnlyContainer(click_count % 5 + 1);
+
+    ShowOnlyContainer(click_count % 4 + 1);
 }
 
 void ButtonEvent_PowerKeyDoubleClick(void)
 {
-    ShowOnlyContainer(5);
+    ShowOnlyContainer(4);
 }
 
 void ButtonEvent_PowerKeyLongPress(void)
@@ -363,7 +426,7 @@ void ButtonEvent_BootKeyClick(void)
     {
         lv_label_set_text(src_ui.label_overall_info, overall_text);
         Lvgl_unlock();
-    }  
+    }
 }
 
 void ButtonEvent_BootKeyDoubleClick(void)
@@ -407,7 +470,6 @@ void Button_LoopTask(void *arg)
     }
 }
 
-
 void Touch_LoopTask(void *arg)
 {
     uint32_t io_num;
@@ -422,41 +484,41 @@ void Touch_LoopTask(void *arg)
                 {
                     if (x < 80 && y < 80)
                     {
-                        ESP_LOGI(TAG, "Touch button event: Button 1 clicked at (%d,%d)", x, y);
+                        ESP_LOGI(TAG, "Touch button event: NEXT PERIOD clicked at (%d,%d)", x, y);
                         if (Lvgl_lock(portMAX_DELAY))
                         {
-                            lv_label_set_text(src_ui.screen_label_23, "Button 1 was clicked");
-                            Lvgl_unlock();
-                        }
-                    }
-                    else if (x < 80 && y < 198 && y >= 118)
-                    {
-                        ESP_LOGI(TAG, "Touch button event: Button 3 clicked at (%d,%d)", x, y);
-                        if (Lvgl_lock(portMAX_DELAY))
-                        {
-                            lv_label_set_text(src_ui.screen_label_23, "Button 3 was clicked");
+                            TouchContainer_NextPeriod();
                             Lvgl_unlock();
                         }
                     }
                     else if (x >= 119 && x < 199 && y < 80)
                     {
-                        ESP_LOGI(TAG, "Touch button event: Button 2 clicked at (%d,%d)", x, y);
+                        ESP_LOGI(TAG, "Touch button event: ACTIVATE clicked at (%d,%d)", x, y);
                         if (Lvgl_lock(portMAX_DELAY))
                         {
-                            lv_label_set_text(src_ui.screen_label_23, "Button 2 was clicked");
+                            TouchContainer_ActivatePeriod();
+                            Lvgl_unlock();
+                        }
+                    }
+                    else if (x < 80 && y >= 118 && y < 198)
+                    {
+                        ESP_LOGI(TAG, "Touch button event: MORE SETTING clicked at (%d,%d)", x, y);
+                        if (Lvgl_lock(portMAX_DELAY))
+                        {
+                            TouchContainer_MoreSetting();
                             Lvgl_unlock();
                         }
                     }
                     else if (x >= 119 && x < 199 && y >= 118 && y < 198)
                     {
-                        ESP_LOGI(TAG, "Touch button event: Button 4 clicked at (%d,%d)", x, y);
+                        ESP_LOGI(TAG, "Touch button event: CANCEL clicked at (%d,%d)", x, y);
                         if (Lvgl_lock(portMAX_DELAY))
                         {
-                            lv_label_set_text(src_ui.screen_label_23, "Button 4 was clicked");
+                            TouchContainer_CancelSelection();
                             Lvgl_unlock();
                         }
                     }
-                    ESP_LOGW("touch","(%d,%d)",x,y);
+                    ESP_LOGW("touch", "(%d,%d)", x, y);
                 }
             }
         }
@@ -482,4 +544,3 @@ void Touch_ISR_GPIO_Init()
     gpio_isr_handler_add(EPD_TP_INT_PIN, gpio_isr_handler, (void *)EPD_TP_INT_PIN);
     gpio_evt_queue = xQueueCreate(3, sizeof(uint32_t));
 }
-
