@@ -29,7 +29,7 @@ extern "C" void app_main(void) {
 	UserApp_Init();
     PortLvgl_Start_Init();
     Lvgl_PortInit(Lvgl_flush_cb);
-    if(Lvgl_lock(-1)) {
+    if(Lvgl_lock(portMAX_DELAY)) {
         UserUi_Init();
         Lvgl_unlock();
     }

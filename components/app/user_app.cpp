@@ -17,6 +17,7 @@
 #include "port_codec.h"
 #include "esp_timer.h"
 
+
 #define TAG "user_app"
 
 static I2cMasterBus *i2c_bus = NULL;
@@ -35,10 +36,16 @@ static bool audiouiflag = 0;
 static bool touchflag = 0;
 static QueueHandle_t gpio_evt_queue = NULL;
 static uint8_t *audio_data_ptr = NULL;
+QueueHandle_t xTempDataQueue = NULL;
+
+static float max_temp = 0;
+static float min_temp = 100;
 
 static lv_timer_t *temp_timer = NULL;
-float max_temp = 0;
-float min_temp = 100;
+
+#define MAX_TEMP_QUEUE_SIZE 100
+
+
 
 static void temp_update_timer_cb(lv_timer_t *timer)
 {
@@ -46,53 +53,30 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     const uint16_t TEMP_SCALER = 3;
 
     pcf85063a_datetime_t current_time = {};
-
-    if (src_ui.screen && lv_obj_has_flag(src_ui.temp_chart, LV_OBJ_FLAG_HIDDEN))
-    {
-        lv_obj_clear_flag(src_ui.temp_chart, LV_OBJ_FLAG_HIDDEN);
-    }
-
-    // int temp = 20 + (int)(esp_timer_get_time() % 21);
     float t, h;
     Shtc3_ReadTempHumi(&t, &h);
-    if ((t != -1000) && (h != -1000))
+    if (t == -1000 || h == -1000)
     {
-        t += 0.5;
-    }
-    else
-    {
+        ESP_LOGE(TAG, "Failed to read temperature and humidity");
         return;
     }
-    if (t > max_temp)
-    {
-        max_temp = t;
-    }
-    if (t < min_temp)
-    {
-        min_temp = t;
-    }
-    int temp = (int)t;
-    char buf[32];
-
     pcf85063a_get_time_date(&pcf85063, &current_time);
-    snprintf(buf, sizeof(buf), "%d<%d<%d°C %02d-%02d %02d:%02d", (int)max_temp, temp, (int)min_temp, current_time.month, current_time.day, current_time.hour, current_time.min);
-
-    if (src_ui.temp_label)
-    {
-        if (lv_obj_has_flag(src_ui.temp_label, LV_OBJ_FLAG_HIDDEN))
-        {
-            lv_obj_clear_flag(src_ui.temp_label, LV_OBJ_FLAG_HIDDEN);
+    temp_record_t record = {
+        .temperature = t,
+        .ts = {
+            .year = current_time.year,
+            .month = current_time.month,
+            .day = current_time.day,
+            .hour = current_time.hour,
+            .minute = current_time.min,
+            .second = current_time.sec,
         }
+    };
 
-        lv_label_set_text(src_ui.temp_label, buf);
-    }
-    temp -= TEMP_OFFSET;
-    temp *= TEMP_SCALER;
-
-    if (src_ui.temp_chart && src_ui.temp_series)
+    // send to temp queue
+    if (xQueueSend(xTempDataQueue, &record, 0) != pdPASS)
     {
-        lv_chart_set_next_value(src_ui.temp_chart, src_ui.temp_series, temp);
-        lv_obj_invalidate(src_ui.temp_chart);
+        ESP_LOGW(TAG, "Temperature queue is full, dropping data");
     }
 }
 
@@ -100,9 +84,10 @@ void Led_LoopTask(void *arg);
 void Lvgl_LoopTask(void *arg);
 void InitializeButtons(void); /* button 初始化 */
 void Button_LoopTask(void *arg);
-void Touch_LoppTask(void *arg);
+void Touch_LoopTask(void *arg);
 static void gpio_isr_handler(void *arg);
 void Touch_ISR_GPIO_Init();
+
 
 void UserApp_Init()
 {
@@ -137,7 +122,12 @@ void UserApp_Init()
     Shtc3_Init(i2c_bus);
     Touch_ISR_GPIO_Init();
     Codec_StartInit();
+    
+    // initialize temperature queue
+    xTempDataQueue = xQueueCreate(MAX_TEMP_QUEUE_SIZE, sizeof(temp_record_t));
+    assert(xTempDataQueue);
 }
+
 
 static void ShowOnlyContainer(int container_number)
 {
@@ -149,30 +139,26 @@ static void ShowOnlyContainer(int container_number)
         src_ui.temp_chart_container,
     };
 
-    ESP_LOGI(TAG, "display container: %d", container_number);
+    ESP_LOGI(TAG, "container: %d", container_number);
 
-    // if (Lvgl_lock(-1))
+    // if (Lvgl_lock(portMAX_DELAY))
     {
-        for (int i = 0; i < 5; ++i)
-        {
-            if (containers[i] == NULL)
-            {
-                continue;
-            }
-            lv_obj_add_flag(containers[i], LV_OBJ_FLAG_HIDDEN);
-        }
+        // make all containers hidden first
+        lv_obj_add_flag(src_ui.temp_chart_container, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(src_ui.screen_cont_2, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(src_ui.screen_cont_3, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(src_ui.screen_cont_4, LV_OBJ_FLAG_HIDDEN);
 
         if (container_number >= 1 && container_number <= 5)
         {
-            if (containers[container_number - 1] != NULL)
-            {
-                lv_obj_remove_flag(containers[container_number - 1], LV_OBJ_FLAG_HIDDEN);
-            }
+            lv_obj_remove_flag(containers[container_number - 1], LV_OBJ_FLAG_HIDDEN);
         }
         
-        // Lvgl_unlock();
+        // Lvgl_unlock();  // 操作完成后释放锁
     }
 }
+
 
 void UserUi_Init()
 {
@@ -187,18 +173,21 @@ void UserUi_Init()
     lv_label_set_text(src_ui.screen_label_temp_info, Lvgl_buffer);
 
     // temp_timer = lv_timer_create(temp_update_timer_cb, 1000, NULL);
-    temp_timer = lv_timer_create(temp_update_timer_cb, 10000, NULL);
+    temp_timer = lv_timer_create(temp_update_timer_cb, 3000, NULL);
     lv_timer_set_repeat_count(temp_timer, -1);
     temp_update_timer_cb(0);
 }
+
+
 
 void UserApp_Start_Init()
 {
     xTaskCreatePinnedToCore(Led_LoopTask, "Led_LoopTask", 4 * 1024, NULL, 4, NULL, 1);
     xTaskCreatePinnedToCore(Lvgl_LoopTask, "Lvgl_LoopTask", 5 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Button_LoopTask, "Button_LoopTask", 4 * 1024, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(Touch_LoppTask, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(Touch_LoopTask, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
 }
+
 
 void Led_LoopTask(void *arg)
 {
@@ -219,51 +208,91 @@ void Led_LoopTask(void *arg)
     }
 }
 
+
+
 void Lvgl_LoopTask(void *arg)
 {
     uint32_t times = 0;
     uint32_t shtc3_time = 0;
     uint32_t rtc_time = 0;
     uint32_t adc_time = 0;
-    if (pcf85063initflag)
-    {
-        pcf85063a_datetime_t datatime = {};
-        datatime.year = 2026;
-        datatime.month = 1;
-        datatime.day = 1;
-        datatime.hour = 8;
-        datatime.min = 0;
-        datatime.sec = 0;
-        pcf85063a_set_time_date(&pcf85063, datatime);
-    }
-    if (0 == sdcardinitflag)
-    {
-    }
-    else
-    {
-        char sdcard_test1[20] = {"waveshare.com"};
-        char sdcard_test2[20] = {""};
-        Sdcard_WriteFile("/sdcard/sdcard.txt", sdcard_test1);
-        Sdcard_ReadFile("/sdcard/sdcard.txt", sdcard_test2, NULL);
-        if (!strcmp(sdcard_test1, sdcard_test2))
-        {
-            // lv_label_set_text(src_ui.screen_label_5, "passed");
-        }
-        else
-        {
-            // lv_label_set_text(src_ui.screen_label_5, "failed");
-        }
-    }
-    if (1 == adcinitflag)
-    {
-        snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%d%%", Get_Batterylevel());
-    }
-    if (1 == shtc3initflag)
-    {
-    }
-    for (;;)
+    temp_record_t temp_record[MAX_TEMP_QUEUE_SIZE];
+    temp_record_t tmpTemp;
+
+    pcf85063a_datetime_t datatime = {};
+    datatime.year = 2026;
+    datatime.month = 1;
+    datatime.day = 1;
+    datatime.hour = 8;
+    datatime.min = 0;
+    datatime.sec = 0;
+    pcf85063a_set_time_date(&pcf85063, datatime);
+
+    while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
+        times++;
+        if (times < 3)
+        {
+            continue;
+        }
+        times = 0;
+
+        // receive all temperature data from queue and update chart
+        while (xQueueReceive(xTempDataQueue, &tmpTemp, 0) == pdPASS)
+        {
+            // step in one new data in temp_record buffer, keep the latest in the end of the buffer
+            for (int i = 1; i < MAX_TEMP_QUEUE_SIZE; ++i)
+            {
+                temp_record[i - 1] = temp_record[i];
+            }
+            temp_record[MAX_TEMP_QUEUE_SIZE - 1] = tmpTemp;
+        }
+
+        // update temperature chart with temp_record buffer
+        if (Lvgl_lock(portMAX_DELAY))
+        {
+            for (int i = 0; i < MAX_TEMP_QUEUE_SIZE; ++i)
+            {
+                lv_chart_set_next_value(src_ui.temp_chart, src_ui.temp_series, temp_record[i].temperature);
+
+                if (temp_record[i].temperature > max_temp)
+                {
+                    max_temp = temp_record[i].temperature;
+                }
+                if (temp_record[i].temperature < min_temp)
+                {
+                    min_temp = temp_record[i].temperature;
+                }
+                if (min_temp == 0) // wrong data, set it to a reasonable default value
+                {
+                    min_temp = 100;
+                }
+            }
+
+            // if the container 1 is showing, then update the label text, otherwise do nothing.
+            if (!lv_obj_has_flag(src_ui.temp_chart_container, LV_OBJ_FLAG_HIDDEN))
+            {
+                lv_obj_invalidate(src_ui.temp_chart);
+                int temp = (int)tmpTemp.temperature;
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%d<%d<%d°C %02d-%02d %02d:%02d", (int)max_temp, temp, (int)min_temp, tmpTemp.ts.month, tmpTemp.ts.day, tmpTemp.ts.hour, tmpTemp.ts.minute);
+
+                if (src_ui.temp_label)
+                {
+                    lv_label_set_text(src_ui.temp_label, buf);
+                }
+                // print log for debug
+                ESP_LOGI(TAG, "Temperature updated");
+            }
+            else // redraw the chart of temperature data
+            {
+
+                ESP_LOGI(TAG, "temperature chart is hidden");
+            }
+
+            Lvgl_unlock();
+        }
     }
 }
 
@@ -300,25 +329,18 @@ void InitializeButtons(void)
                                   xEventGroupSetBits(FacTestEventGroup, (0x04)); });
 }
 
-void ButtonEvent_PowerKeyClick(void)
-{
-    if (0 == audiouiflag)
-    {
-        audiouiflag = 1;
-        ShowOnlyContainer(2);
-    }
-    else
-    {
-        audiouiflag = 0;
-        ShowOnlyContainer(1);
-    }
-}
 
-void ButtonEvent_PowerKeyDoubleClick(void)
+
+void ButtonEvent_PowerKeyClick(void)
 {
     static uint16_t click_count = 0;
     click_count++;
     ShowOnlyContainer(click_count % 5 + 1);
+}
+
+void ButtonEvent_PowerKeyDoubleClick(void)
+{
+    ShowOnlyContainer(5);
 }
 
 void ButtonEvent_PowerKeyLongPress(void)
@@ -328,8 +350,20 @@ void ButtonEvent_PowerKeyLongPress(void)
 
 void ButtonEvent_BootKeyClick(void)
 {
-    // power_button double click
-    ShowOnlyContainer(5);
+    // if being container 1 showing, then update the label text, otherwise do nothing.
+    if (lv_obj_has_flag(src_ui.screen_cont_1, LV_OBJ_FLAG_HIDDEN))
+    {
+        return;
+    }
+
+    char overall_text[64] = "";
+    snprintf(overall_text, sizeof(overall_text), "Double Clicked!Max: %.1f°C, Min: %.1f°C", max_temp, min_temp);
+    // update label text in container 1
+    if (Lvgl_lock(portMAX_DELAY))
+    {
+        lv_label_set_text(src_ui.label_overall_info, overall_text);
+        Lvgl_unlock();
+    }  
 }
 
 void ButtonEvent_BootKeyDoubleClick(void)
@@ -374,14 +408,14 @@ void Button_LoopTask(void *arg)
 }
 
 
-void Touch_LoppTask(void *arg)
+void Touch_LoopTask(void *arg)
 {
     uint32_t io_num;
     for (;;)
     {
         if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY))
         {
-            if (1 == touchflag)
+            // if (1 == touchflag)
             {
                 uint16_t x, y;
                 if (ft6336_dev->GetTouchPoint(&x, &y))
@@ -389,7 +423,7 @@ void Touch_LoppTask(void *arg)
                     if (x < 80 && y < 80)
                     {
                         ESP_LOGI(TAG, "Touch button event: Button 1 clicked at (%d,%d)", x, y);
-                        if (Lvgl_lock(-1))
+                        if (Lvgl_lock(portMAX_DELAY))
                         {
                             lv_label_set_text(src_ui.screen_label_23, "Button 1 was clicked");
                             Lvgl_unlock();
@@ -398,7 +432,7 @@ void Touch_LoppTask(void *arg)
                     else if (x < 80 && y < 198 && y >= 118)
                     {
                         ESP_LOGI(TAG, "Touch button event: Button 3 clicked at (%d,%d)", x, y);
-                        if (Lvgl_lock(-1))
+                        if (Lvgl_lock(portMAX_DELAY))
                         {
                             lv_label_set_text(src_ui.screen_label_23, "Button 3 was clicked");
                             Lvgl_unlock();
@@ -407,7 +441,7 @@ void Touch_LoppTask(void *arg)
                     else if (x >= 119 && x < 199 && y < 80)
                     {
                         ESP_LOGI(TAG, "Touch button event: Button 2 clicked at (%d,%d)", x, y);
-                        if (Lvgl_lock(-1))
+                        if (Lvgl_lock(portMAX_DELAY))
                         {
                             lv_label_set_text(src_ui.screen_label_23, "Button 2 was clicked");
                             Lvgl_unlock();
@@ -416,13 +450,13 @@ void Touch_LoppTask(void *arg)
                     else if (x >= 119 && x < 199 && y >= 118 && y < 198)
                     {
                         ESP_LOGI(TAG, "Touch button event: Button 4 clicked at (%d,%d)", x, y);
-                        if (Lvgl_lock(-1))
+                        if (Lvgl_lock(portMAX_DELAY))
                         {
                             lv_label_set_text(src_ui.screen_label_23, "Button 4 was clicked");
                             Lvgl_unlock();
                         }
                     }
-                    // ESP_LOGW("touch","(%d,%d)",x,y);
+                    ESP_LOGW("touch","(%d,%d)",x,y);
                 }
             }
         }
@@ -449,18 +483,3 @@ void Touch_ISR_GPIO_Init()
     gpio_evt_queue = xQueueCreate(3, sizeof(uint32_t));
 }
 
-void Audio_LoppTask(void *arg)
-{
-    for (;;)
-    {
-        EventBits_t even = xEventGroupWaitBits(FacTestEventGroup, (0x10), pdTRUE, pdFALSE, portMAX_DELAY);
-        if (even & 0x10)
-        {
-            if (1 == audiouiflag)
-            {
-                Codec_RecordData(audio_data_ptr, 102400);
-                Codec_PlaybackData(audio_data_ptr, 102400);
-            }
-        }
-    }
-}

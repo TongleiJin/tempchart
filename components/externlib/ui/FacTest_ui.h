@@ -12,6 +12,7 @@ extern "C"
 		lv_obj_t *screen;
 		bool screen_del;
 		lv_obj_t *screen_cont_1;
+		lv_obj_t *label_overall_info;
 		lv_obj_t *screen_label_temp_info;
 		lv_obj_t *screen_cont_2;
 		lv_obj_t *screen_img_5;
