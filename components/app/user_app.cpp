@@ -18,6 +18,7 @@
 #include "esp_timer.h"
 
 #define TAG "user_app"
+#define LED_BLINK_BIT 0x80
 
 static I2cMasterBus *i2c_bus = NULL;
 static I2cFt6336Dev *ft6336_dev = NULL;
@@ -189,20 +190,19 @@ void UpdateMainInfoLabel(void)
     char buf[140] = "";
     if (overallInfoPageNumber == 1)
     {
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "Batt:%d%%", Get_Batterylevel());
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nSample period: %lu", active_s);
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nCount: %lu", temp_sample_count);
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nTemp offset:%u", TEMP_OFFSET);
-        
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Batt:%d%%", Get_Batterylevel());
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSample period: %lu", active_s);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sample_count);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset:%u", TEMP_OFFSET);
     }
     else
     {
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "KEYS:");
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nBOOT: show max/min");
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nBOOT DOUBLE: home");
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nPOWER: next page");
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nPOWER LONG: power off");
-        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nPOWER DOUBLE: show chart");
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "KEYS:");
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nBOOT: show max/min");
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nBOOT DOUBLE: home");
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPOWER: next page");
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPOWER LONG: power off");
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPOWER DOUBLE: show chart");
     }
 
     if (Lvgl_lock(portMAX_DELAY))
@@ -302,12 +302,18 @@ void Led_LoopTask(void *arg)
     gpio_conf.pull_up_en = GPIO_PULLUP_ENABLE;
 
     ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&gpio_conf));
+    gpio_set_level(LED_PIN, 1);
+
     for (;;)
     {
-        gpio_set_level(LED_PIN, 0);
-        vTaskDelay(pdMS_TO_TICKS(20));
-        gpio_set_level(LED_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(1980));
+        EventBits_t bits = xEventGroupWaitBits(FacTestEventGroup, LED_BLINK_BIT, pdTRUE, pdFALSE, portMAX_DELAY);
+        if (bits & LED_BLINK_BIT)
+        {
+            gpio_set_level(LED_PIN, 0);
+            vTaskDelay(pdMS_TO_TICKS(20));
+            gpio_set_level(LED_PIN, 1);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
     }
 }
 
@@ -417,32 +423,32 @@ void InitializeButtons(void)
     boot_button->OnClick([]()
                          {
                              ESP_LOGI(TAG, "boot_button click");
-                             xEventGroupSetBits(FacTestEventGroup, (0x10)); });
+                             xEventGroupSetBits(FacTestEventGroup, (0x10) | LED_BLINK_BIT); });
 
     boot_button->OnDoubleClick([]()
                                {
                                     ESP_LOGI(TAG, "boot_button double click");
-                                    xEventGroupSetBits(FacTestEventGroup, (0x20)); });
+                                    xEventGroupSetBits(FacTestEventGroup, (0x20) | LED_BLINK_BIT); });
 
     boot_button->OnLongPress([]()
                              {
                                  ESP_LOGI(TAG, "boot_button long press");
-                                 xEventGroupSetBits(FacTestEventGroup, (0x40)); });
+                                 xEventGroupSetBits(FacTestEventGroup, (0x40) | LED_BLINK_BIT); });
 
     power_button->OnClick([]()
                           {
                               ESP_LOGI(TAG, "power_button click");
-                              xEventGroupSetBits(FacTestEventGroup, (0x01)); });
+                              xEventGroupSetBits(FacTestEventGroup, (0x01) | LED_BLINK_BIT); });
 
     power_button->OnDoubleClick([]()
                                 {
                                     ESP_LOGI(TAG, "power_button double click");
-                                    xEventGroupSetBits(FacTestEventGroup, (0x02)); });
+                                    xEventGroupSetBits(FacTestEventGroup, (0x02) | LED_BLINK_BIT); });
 
     power_button->OnLongPress([]()
                               {
                                   ESP_LOGI(TAG, "power_button long press");
-                                  xEventGroupSetBits(FacTestEventGroup, (0x04)); });
+                                  xEventGroupSetBits(FacTestEventGroup, (0x04) | LED_BLINK_BIT); });
 }
 
 void ButtonEvent_PowerKeyClick(void)
