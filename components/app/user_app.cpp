@@ -189,16 +189,20 @@ void UpdateMainInfoLabel(void)
     char buf[140] = "";
     if (overallInfoPageNumber == 1)
     {
-        snprintf(buf, sizeof(buf),
-                 "KEYS:\nBOOT: show max/min\nBOOT DOUBLE: home\nPOWER: next page\nPOWER LONG: power off\nPOWER DOUBLE: show chart");
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "Batt:%d%%", Get_Batterylevel());
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nSample period: %lu", active_s);
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nCount: %lu", temp_sample_count);
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nTemp offset:%u", TEMP_OFFSET);
+        
     }
     else
     {
-        snprintf(buf, sizeof(buf),
-                 "Temp sample: %lus\nCount: %lu\nTemp offset:%u",
-                 active_s,
-                 temp_sample_count,
-                 TEMP_OFFSET);
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "KEYS:");
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nBOOT: show max/min");
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nBOOT DOUBLE: home");
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nPOWER: next page");
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nPOWER LONG: power off");
+        snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\nPOWER DOUBLE: show chart");
     }
 
     if (Lvgl_lock(portMAX_DELAY))
