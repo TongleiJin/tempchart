@@ -190,10 +190,10 @@ void UpdateMainInfoLabel(void)
     char buf[140] = "";
     if (overallInfoPageNumber == 1)
     {
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Batt:%d%%", Get_Batterylevel());
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSample period: %lu", active_s);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Power: %d%%", Get_Batterylevel());
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\n\nSample period: %lu", active_s);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sample_count);
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset:%u", TEMP_OFFSET);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset: %u", TEMP_OFFSET);
     }
     else
     {
