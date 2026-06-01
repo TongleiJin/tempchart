@@ -100,7 +100,7 @@ static void time_update_timer_cb(lv_timer_t *timer)
     pcf85063a_get_time_date(&pcf85063, &current_time);
 
     /* Only update the on-screen time when container 1 is visible */
-    if (!lv_obj_has_flag(src_ui.container_home, LV_OBJ_FLAG_HIDDEN) && src_ui.label_homeClock)
+    if (!lv_obj_has_flag(src_ui.container_home, LV_OBJ_FLAG_HIDDEN) && (overallInfoPageNumber==1) && src_ui.label_homeClock)
     {
         snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d:%02d:%02d", current_time.hour, current_time.min, current_time.sec);
         lv_label_set_text(src_ui.label_homeClock, Lvgl_buffer);
