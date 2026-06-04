@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <freertos/FreeRTOS.h>
 #include <driver/gpio.h>
+#include <driver/ledc.h>
+#include <esp_err.h>
 #include <esp_log.h>
 #include "user_app.h"
 #include "port_power.h"
@@ -32,6 +34,18 @@ static char Lvgl_buffer[60];
 static QueueHandle_t gpio_evt_queue = NULL;
 static uint8_t *audio_data_ptr = NULL;
 QueueHandle_t xTempDataQueue = NULL;
+
+#define SERVO_GPIO GPIO_NUM_20
+#define SERVO_LEDC_MODE LEDC_LOW_SPEED_MODE
+#define SERVO_LEDC_CHANNEL LEDC_CHANNEL_0
+#define SERVO_LEDC_TIMER LEDC_TIMER_0
+#define SERVO_LEDC_DUTY_RES LEDC_TIMER_13_BIT
+#define SERVO_LEDC_FREQ_HZ 50
+
+static void Servo_Init(void);
+static void Servo_SetAngle(uint8_t angle);
+static void Servo_Task(void *arg);
+static int16_t servo_current_angle = 90;
 
 int overallInfoPageNumber = 1;
 static float max_temp = 0;
@@ -139,6 +153,8 @@ void UserApp_Init()
     Shtc3_Init(i2c_bus);
     Touch_ISR_GPIO_Init();
     Codec_StartInit();
+
+    Servo_Init();
 
     // initialize temperature queue
     xTempDataQueue = xQueueCreate(MAX_TEMP_QUEUE_SIZE, sizeof(temp_record_t));
@@ -453,15 +469,20 @@ void InitializeButtons(void)
 
 void ButtonEvent_PowerKeyClick(void)
 {
-    static uint16_t click_count = 0;
-    click_count++;
-
-    ShowOnlyContainer(click_count % 4 + 1);
+    servo_current_angle += 10;
+    if (servo_current_angle > 180)
+    {
+        servo_current_angle = 180;
+    }
+    Servo_SetAngle((uint8_t)servo_current_angle);
+    ESP_LOGI(TAG, "power_button click: servo cw 10deg -> %d", servo_current_angle);
 }
 
 void ButtonEvent_PowerKeyDoubleClick(void)
 {
-    ShowOnlyContainer(4);
+    // ShowOnlyContainer(4);
+    
+    Servo_SetAngle((uint8_t)170);
 }
 
 void ButtonEvent_PowerKeyLongPress(void)
@@ -471,19 +492,18 @@ void ButtonEvent_PowerKeyLongPress(void)
 
 void ButtonEvent_BootKeyClick(void)
 {
-    // if being container 1 showing, then update the label text, otherwise do nothing.
-    if (lv_obj_has_flag(src_ui.container_home, LV_OBJ_FLAG_HIDDEN))
+    servo_current_angle -= 20;
+    if (servo_current_angle < 0)
     {
-        return;
+        servo_current_angle = 0;
     }
-    overallInfoPageNumber++;
-    overallInfoPageNumber %= 2;
-    UpdateMainInfoLabel();
+    Servo_SetAngle((uint8_t)servo_current_angle);
+    ESP_LOGI(TAG, "boot_button click: servo ccw 20deg -> %d", servo_current_angle);
 }
 
 void ButtonEvent_BootKeyDoubleClick(void)
 {
-    ShowOnlyContainer(1);
+    Servo_SetAngle((uint8_t)10);
 }
 
 void ButtonEvent_BootKeyLongPress(void)
@@ -600,4 +620,68 @@ void Touch_ISR_GPIO_Init()
     gpio_install_isr_service(0);
     gpio_isr_handler_add(EPD_TP_INT_PIN, gpio_isr_handler, (void *)EPD_TP_INT_PIN);
     gpio_evt_queue = xQueueCreate(3, sizeof(uint32_t));
+}
+
+static void Servo_Init(void)
+{
+    ledc_timer_config_t ledc_timer = {};
+    ledc_timer.speed_mode = SERVO_LEDC_MODE;
+    ledc_timer.duty_resolution = SERVO_LEDC_DUTY_RES;
+    ledc_timer.timer_num = SERVO_LEDC_TIMER;
+    ledc_timer.freq_hz = SERVO_LEDC_FREQ_HZ;
+    ledc_timer.clk_cfg = LEDC_AUTO_CLK;
+    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+
+    ledc_channel_config_t ledc_channel = {};
+    ledc_channel.speed_mode = SERVO_LEDC_MODE;
+    ledc_channel.channel = SERVO_LEDC_CHANNEL;
+    ledc_channel.timer_sel = SERVO_LEDC_TIMER;
+    ledc_channel.intr_type = LEDC_INTR_DISABLE;
+    ledc_channel.gpio_num = SERVO_GPIO;
+    ledc_channel.duty = 0;
+    ledc_channel.hpoint = 0;
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+
+    servo_current_angle = 90;
+    Servo_SetAngle(servo_current_angle);
+}
+
+static void Servo_SetAngle(uint8_t angle)
+{
+    if (angle > 180)
+    {
+        angle = 180;
+    }
+
+    const uint32_t min_pulse_us = 500;
+    const uint32_t max_pulse_us = 2500;
+    const uint32_t period_us = 20000;
+    const uint32_t pulse_us = min_pulse_us + ((uint32_t)angle * (max_pulse_us - min_pulse_us)) / 180;
+    const uint32_t max_duty = (1 << SERVO_LEDC_DUTY_RES) - 1;
+    uint32_t duty = (pulse_us * max_duty) / period_us;
+
+    ESP_ERROR_CHECK(ledc_set_duty(SERVO_LEDC_MODE, SERVO_LEDC_CHANNEL, duty));
+    ESP_ERROR_CHECK(ledc_update_duty(SERVO_LEDC_MODE, SERVO_LEDC_CHANNEL));
+}
+
+static void Servo_Task(void *arg)
+{
+    uint8_t angle = 0;
+    int8_t step = 10;
+
+    for (;;)
+    {
+        Servo_SetAngle(angle);
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+        if (angle == 180)
+        {
+            step = -10;
+        }
+        else if (angle == 0)
+        {
+            step = 10;
+        }
+        angle += step;
+    }
 }
