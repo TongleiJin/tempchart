@@ -1,5 +1,5 @@
 idf_component_register(
-  SRCS "user_app.cpp"
+  SRCS "user_app.cpp" "lite_fifo.c"
   PRIV_REQUIRES
   port_bsp
   ui

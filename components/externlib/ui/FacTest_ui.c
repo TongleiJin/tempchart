@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include "FacTest_ui.h"
 
+
+#define MAX_TEMP_CHART_POINT_COUNT 10
+
 static void setup_scr_screen(lv_factest_ui *ui);
 
 void setup_factest_ui(lv_factest_ui *ui) {
@@ -133,10 +136,10 @@ void setup_scr_screen(lv_factest_ui *ui)
     lv_obj_set_style_image_opa(ui->screen_img_5, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
     
     // 容器 3：4个按钮
-    ui->container_touchButton = create_base_container(ui->screen, 0, 0, 200, 200, true);
+    ui->container_setting = create_base_container(ui->screen, 0, 0, 200, 200, true);
     
     // 按钮标签
-    ui->label_touchEvent = lv_label_create(ui->container_touchButton);
+    ui->label_touchEvent = lv_label_create(ui->container_setting);
     lv_obj_set_pos(ui->label_touchEvent, 5, 86);
     lv_obj_set_size(ui->label_touchEvent, 189, 25);
     lv_label_set_text(ui->label_touchEvent, "");
@@ -146,10 +149,10 @@ void setup_scr_screen(lv_factest_ui *ui)
     lv_obj_set_style_pad_top(ui->label_touchEvent, 3, LV_PART_MAIN|LV_STATE_DEFAULT);
     
     // 创建4个按钮
-    create_button(ui->container_touchButton, 0, 0, 80, 80, "NEXT");
-    create_button(ui->container_touchButton, 119, 0, 80, 80, "GO");
-    create_button(ui->container_touchButton, 0, 118, 80, 80, "MORE");
-    create_button(ui->container_touchButton, 119, 118, 80, 80, "CANCEL");
+    create_button(ui->container_setting, 0, 0, 80, 80, "NEXT");
+    create_button(ui->container_setting, 119, 0, 80, 80, "GO");
+    create_button(ui->container_setting, 0, 118, 80, 80, "MORE");
+    create_button(ui->container_setting, 119, 118, 80, 80, "CANCEL");
     
     // 温度图表容器
     // ui->container_tempChart = lv_obj_create(ui->screen);
@@ -157,11 +160,11 @@ void setup_scr_screen(lv_factest_ui *ui)
     
     // 图表
     ui->temp_chart = lv_chart_create(ui->container_tempChart);
-    lv_obj_set_size(ui->temp_chart, 180, 120);
+    lv_obj_set_size(ui->temp_chart, 198, 160);
     lv_obj_align(ui->temp_chart, LV_ALIGN_TOP_MID, 0, 10);
     lv_chart_set_type(ui->temp_chart, LV_CHART_TYPE_LINE);
-    lv_chart_set_point_count(ui->temp_chart, 100);
-    lv_chart_set_range(ui->temp_chart, LV_CHART_AXIS_PRIMARY_Y, 10, 45);
+    lv_chart_set_point_count(ui->temp_chart, MAX_TEMP_CHART_POINT_COUNT);
+    lv_chart_set_range(ui->temp_chart, LV_CHART_AXIS_PRIMARY_Y, 20, 40);
     lv_obj_set_style_bg_color(ui->temp_chart, lv_color_hex(0xffffff), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ui->temp_chart, 0, LV_PART_MAIN);
     lv_obj_set_style_border_color(ui->temp_chart, lv_color_hex(0x000000), LV_PART_MAIN);
@@ -178,14 +181,15 @@ void setup_scr_screen(lv_factest_ui *ui)
     }
     
     ui->lable_tempStatics = lv_label_create(ui->container_tempChart);
-    lv_obj_set_pos(ui->lable_tempStatics, 10, 170);
+    lv_obj_set_pos(ui->lable_tempStatics, 2, 175);
     lv_obj_set_size(ui->lable_tempStatics, 180, 20);
-    lv_label_set_text(ui->lable_tempStatics, "Waiting 20s...");
+    lv_label_set_long_mode(ui->lable_tempStatics, LV_LABEL_LONG_DOT);
+    lv_label_set_text(ui->lable_tempStatics, "...");
 
-    ui->label_startTime = lv_label_create(ui->container_tempChart);
-    lv_obj_set_pos(ui->label_startTime, 10, 135);
-    lv_obj_set_size(ui->label_startTime, 180, 20);
-    lv_label_set_long_mode(ui->label_startTime, LV_LABEL_LONG_WRAP);
+    ui->lable_tempDetail = lv_label_create(ui->container_tempChart);
+    lv_obj_set_pos(ui->lable_tempDetail, 10, 10);
+    lv_obj_set_size(ui->lable_tempDetail, 180, 180);
+    lv_label_set_long_mode(ui->lable_tempDetail, LV_LABEL_LONG_WRAP);
     
     // 更新布局
     lv_obj_update_layout(ui->screen);

@@ -19,7 +19,7 @@ extern "C"
 		lv_obj_t *container_image;
 		lv_obj_t *screen_img_5;
 
-		lv_obj_t *container_touchButton;
+		lv_obj_t *container_setting;
 		lv_obj_t *label_touchEvent;
 		lv_obj_t *screen_btn_4;
 		lv_obj_t *screen_btn_4_label;
@@ -31,7 +31,7 @@ extern "C"
 		lv_obj_t *screen_btn_1_label;
 
 		lv_obj_t *container_tempChart;
-		lv_obj_t *label_startTime;
+		lv_obj_t *lable_tempDetail;
 		lv_obj_t *lable_tempStatics;
 		lv_obj_t *temp_chart;
 		lv_chart_series_t *temp_series;
