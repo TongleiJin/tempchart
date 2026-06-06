@@ -187,8 +187,8 @@ void setup_scr_screen(lv_factest_ui *ui)
     lv_label_set_text(ui->lable_tempStatics, "...");
 
     ui->lable_tempDetail = lv_label_create(ui->container_tempChart);
-    lv_obj_set_pos(ui->lable_tempDetail, 3, 3);
-    lv_obj_set_size(ui->lable_tempDetail, 180, 180);
+    lv_obj_set_pos(ui->lable_tempDetail, 0, 0);
+    lv_obj_set_size(ui->lable_tempDetail, 200, 200);
     lv_label_set_long_mode(ui->lable_tempDetail, LV_LABEL_LONG_WRAP);
     
     // 更新布局

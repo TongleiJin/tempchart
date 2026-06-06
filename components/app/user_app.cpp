@@ -537,7 +537,14 @@ void ButtonEvent_BootKeyClick(void)
             snprintf(record_buf, sizeof(record_buf), "%02d:%02d:%02d>%.1f°C\n", record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
             strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
         }
-        lv_label_set_text(scr_ui.lable_tempDetail, buf);
+
+        ESP_LOGI(TAG, "size of detail: %d, content: \n%s", strlen(buf), buf);
+        if (Lvgl_lock(portMAX_DELAY))
+        {
+            lv_label_set_text(scr_ui.lable_tempDetail, buf);
+            Lvgl_unlock();
+        }
+
         if (tempDetailPageNumber <= (MAX_TEMP_DETAIL_TOTAL_PAGE - 3)) // Only latest 3 pages needed
         {
             tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE;
@@ -596,7 +603,6 @@ void Touch_LoopTask(void *arg)
         {
             if (lv_obj_has_flag(scr_ui.container_setting, LV_OBJ_FLAG_HIDDEN))
             {
-
                 ESP_LOGI(TAG, "touched");
                 continue;
             }
