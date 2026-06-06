@@ -38,8 +38,12 @@ QueueHandle_t xTempDataQueue = NULL;
 static int settingTarget = 0;
 
 int overallInfoPageNumber = 1;
-int tempDetailPageNumber = 1;
 
+#define MAX_TEMP_FIFO_SIZE 100
+#define MAX_TEMP_DETAIL_TOTAL_PAGE  (MAX_TEMP_FIFO_SIZE / 10)
+
+int tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE
+;
 static float max_temp = 0;
 static float min_temp = 100;
 
@@ -59,7 +63,6 @@ const uint16_t TEMP_SCALER = 3;
 // define the fifo for user data, with a capacity of 100 records
 static liteFifo_t tempDataFifo;
 
-#define MAX_TEMP_FIFO_SIZE 100
 
 static void UpdateOverallInfoLabel(void);
 void Led_LoopTask(void *arg);
@@ -96,7 +99,7 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     {
         min_temp = t;
     }
-    ESP_LOGI(TAG, "New temp: %ld", temp_sample_count);
+    // ESP_LOGI(TAG, "New temp: %ld", temp_sample_count);
 }
 
 static void time_update_timer_cb(lv_timer_t *timer)
@@ -196,6 +199,7 @@ static void ShowOnlyContainer(int container_number)
             lv_obj_remove_flag(scr_ui.temp_chart, LV_OBJ_FLAG_HIDDEN);
             lv_obj_remove_flag(scr_ui.lable_tempStatics, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(scr_ui.lable_tempDetail, LV_OBJ_FLAG_HIDDEN);
+            tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE;
         }
 
         Lvgl_unlock();
@@ -221,7 +225,7 @@ void UpdateOverallInfoLabel(void)
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sample_count);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset: %u", TEMP_OFFSET);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp scaler: %u", TEMP_SCALER);
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nChart size: %lu", chartPointList[chartPointsActiveIndex]);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nChart size: %lu", lv_chart_get_point_count(scr_ui.temp_chart));
     }
     else
     {
@@ -401,10 +405,10 @@ void Lvgl_LoopTask(void *arg)
 
         fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
         // dump all temperature data for debug
-        for (int i = 0; i < MAX_TEMP_FIFO_SIZE; ++i)
-        {
-            ESP_LOGI(TAG, "temp_record[%d]: temp=%.1f, time=%02d:%02d:%02d", i, temp_record[i].temperature, temp_record[i].timestamp.hour, temp_record[i].timestamp.min, temp_record[i].timestamp.sec);
-        }
+        // for (int i = 0; i < MAX_TEMP_FIFO_SIZE; ++i)
+        // {
+        //     ESP_LOGI(TAG, "temp_record[%d]: temp=%.1f, time=%02d:%02d:%02d", i, temp_record[i].temperature, temp_record[i].timestamp.hour, temp_record[i].timestamp.min, temp_record[i].timestamp.sec);
+        // }
 
         tmpTemp = temp_record[MAX_TEMP_FIFO_SIZE - 1];
         // update temperature chart with temp_record buffer
@@ -433,7 +437,7 @@ void Lvgl_LoopTask(void *arg)
                     lv_label_set_text(scr_ui.lable_tempStatics, buf);
                 }
                 // print log for debug
-                ESP_LOGI(TAG, "chart updated");
+                // ESP_LOGI(TAG, "chart updated");
             }
             else // redraw the chart of temperature data
             {
@@ -520,46 +524,24 @@ void ButtonEvent_BootKeyClick(void)
         fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
 
         // log the value of tempDetailPageNumber
-        ESP_LOGI(TAG, "tempDetailPageNumber: %d", tempDetailPageNumber);
+        tempDetailPageNumber--;
 
-        if (tempDetailPageNumber == 1)
+        char buf[512] = "";
+        int beginIndex = tempDetailPageNumber * 10;
+        char record_buf[64];
+        snprintf(record_buf, sizeof(record_buf), "Page:%d from:%d\n\n", tempDetailPageNumber, beginIndex);
+        strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
+        for (int i = 0; i < 10; ++i)
         {
-            // show all temperature records in detail label
-            // char buf[512] = "";
-            // for (int i = 0; i < 10; ++i)
-            // {
-            //     user_data_t record = temp_record[i];
-            //     char record_buf[64];
-            //     snprintf(record_buf, sizeof(record_buf), "%02d:%02d:%02d - %.1f°C\n", record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
-            //     strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
-            // }
-            // lv_label_set_text(scr_ui.lable_tempDetail, buf);
-            lv_label_set_text(scr_ui.lable_tempDetail, "Showing latest 10 records, click to show again");
+            user_data_t record = temp_record[beginIndex + i];
+            snprintf(record_buf, sizeof(record_buf), "%02d:%02d:%02d>%.1f°C\n", record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
+            strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
         }
-        // else if (tempDetailPageNumber == 2)
-        // {
-        //     // show all temperature records in detail label
-        //     char buf[512] = "";
-        //     for (int i = 10; i < 20; ++i)
-        //     {
-        //         user_data_t record = temp_record[i];
-        //         char record_buf[64];
-        //         snprintf(record_buf, sizeof(record_buf), "%02d:%02d:%02d - %.1f°C\n", record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
-        //         strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
-        //     }
-        //     lv_label_set_text(scr_ui.lable_tempDetail, buf);
-        // }
-        else
+        lv_label_set_text(scr_ui.lable_tempDetail, buf);
+        if (tempDetailPageNumber <= (MAX_TEMP_DETAIL_TOTAL_PAGE - 3)) // Only latest 3 pages needed
         {
-            tempDetailPageNumber = 0;
-            // show only the latest temperature record in detail label
-            user_data_t latest_record = temp_record[MAX_TEMP_FIFO_SIZE - 1];
-            char buf[64];
-            snprintf(buf, sizeof(buf), "%02d:%02d:%02d - %.1f°C", latest_record.timestamp.hour, latest_record.timestamp.min, latest_record.timestamp.sec, latest_record.temperature);
-            lv_label_set_text(scr_ui.lable_tempDetail, buf);
+            tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE;
         }
-
-        tempDetailPageNumber++;
     }
 }
 
