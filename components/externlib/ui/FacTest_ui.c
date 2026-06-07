@@ -186,6 +186,20 @@ void setup_scr_screen(lv_factest_ui *ui)
     lv_label_set_long_mode(ui->lable_tempStatics, LV_LABEL_LONG_DOT);
     lv_label_set_text(ui->lable_tempStatics, "...");
 
+    ui->lable_tempStart = lv_label_create(ui->container_tempChart);
+    lv_obj_set_size(ui->lable_tempStart, 60, 14);
+    lv_label_set_long_mode(ui->lable_tempStart, LV_LABEL_LONG_DOT);
+    lv_label_set_text(ui->lable_tempStart, "");
+    set_label_style(ui->lable_tempStart, lv_color_hex(0x000000), 12);
+    lv_obj_add_flag(ui->lable_tempStart, LV_OBJ_FLAG_HIDDEN);
+
+    ui->lable_tempEnd = lv_label_create(ui->container_tempChart);
+    lv_obj_set_size(ui->lable_tempEnd, 60, 14);
+    lv_label_set_long_mode(ui->lable_tempEnd, LV_LABEL_LONG_DOT);
+    lv_label_set_text(ui->lable_tempEnd, "");
+    set_label_style(ui->lable_tempEnd, lv_color_hex(0x000000), 12);
+    lv_obj_add_flag(ui->lable_tempEnd, LV_OBJ_FLAG_HIDDEN);
+
     ui->lable_tempDetail = lv_label_create(ui->container_tempChart);
     lv_obj_set_pos(ui->lable_tempDetail, 0, 0);
     lv_obj_set_size(ui->lable_tempDetail, 200, 200);

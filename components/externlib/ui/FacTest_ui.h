@@ -33,6 +33,8 @@ extern "C"
 		lv_obj_t *container_tempChart;
 		lv_obj_t *lable_tempDetail;
 		lv_obj_t *lable_tempStatics;
+		lv_obj_t *lable_tempStart;
+		lv_obj_t *lable_tempEnd;
 		lv_obj_t *temp_chart;
 		lv_chart_series_t *temp_series;
 		
