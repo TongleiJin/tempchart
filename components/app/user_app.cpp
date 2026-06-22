@@ -80,13 +80,15 @@ static void temp_update_timer_cb(lv_timer_t *timer)
 {
     pcf85063a_datetime_t current_time = {};
     float t, h;
-    Shtc3_ReadTempHumi(&t, &h);
+    // Shtc3_ReadTempHumi(&t, &h);
+    Sht31_ReadTempHumi(&t, &h);
     if (t == -1000 || h == -1000)
     {
         ESP_LOGE(TAG, "Failed to read temperature and humidity");
         return;
     }
     pcf85063a_get_time_date(&pcf85063, &current_time);
+    
     user_data_t ud;
     // if (simuFlag)
     // {
