@@ -14,6 +14,7 @@
 #include "port_lvgl.h"
 #include "port_adc.h"
 #include "port_shtc3.h"
+#include "port_sht31.h"
 #include "port_codec.h"
 #include "esp_timer.h"
 #include "user_data_type.h"
@@ -68,6 +69,7 @@ void Lvgl_LoopTask(void *arg);
 void InitializeButtons(void); /* button 初始化 */
 void Button_LoopTask(void *arg);
 void Touch_LoopTask(void *arg);
+void Sht31_LoopTask(void *arg);
 static void gpio_isr_handler(void *arg);
 void Touch_ISR_GPIO_Init();
 
@@ -164,6 +166,7 @@ void UserApp_Init()
     InitializeButtons();
     BoardAdc_Init();
     Shtc3_Init(i2c_bus);
+    Sht31_Init(i2c_bus);
     Touch_ISR_GPIO_Init();
     Codec_StartInit();
     user_data_t *buf = (user_data_t *)heap_caps_malloc(sizeof(user_data_t) * MAX_TEMP_FIFO_SIZE, MALLOC_CAP_SPIRAM);
@@ -358,6 +361,7 @@ void UserApp_Start_Init()
     xTaskCreatePinnedToCore(Lvgl_LoopTask, "Lvgl_LoopTask", 5 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Button_LoopTask, "Button_LoopTask", 4 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Touch_LoopTask, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(Sht31_LoopTask, "Sht31_LoopTask", 4 * 1024, NULL, 5, NULL, 1);
 }
 
 void Led_LoopTask(void *arg)
@@ -382,6 +386,24 @@ void Led_LoopTask(void *arg)
             gpio_set_level(LED_PIN, 1);
             vTaskDelay(pdMS_TO_TICKS(100));
         }
+    }
+}
+
+void Sht31_LoopTask(void *arg)
+{
+    float t = 0.0f, h = 0.0f;
+    for (;;)
+    {
+        Sht31_ReadTempHumi(&t, &h);
+        if (t == -1000 || h == -1000)
+        {
+            ESP_LOGE(TAG, "SHT31 read failed");
+        }
+        else
+        {
+            ESP_LOGE(TAG, "SHT31 T=%.2f C  H=%.2f %%", t, h);
+        }
+        vTaskDelay(pdMS_TO_TICKS(2000)); // read every 2s
     }
 }
 
