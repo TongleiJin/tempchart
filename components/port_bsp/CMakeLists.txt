@@ -8,6 +8,7 @@ idf_component_register(
     "port_ft6336.cpp"
     "port_sdcard.cpp"
     "port_shtc3.cpp"
+    "port_sht31.cpp"
     "port_codec.cpp"
     PRIV_REQUIRES
     driver

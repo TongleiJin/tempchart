@@ -14,6 +14,7 @@
 #include "port_lvgl.h"
 #include "port_adc.h"
 #include "port_shtc3.h"
+#include "port_sht31.h"
 #include "port_codec.h"
 #include "esp_timer.h"
 #include "user_data_type.h"
@@ -47,8 +48,8 @@ static float max_temp = 0;
 static float min_temp = 100;
 
 static lv_timer_t *temp_timer = NULL;
-static lv_timer_t *time_timer = NULL;
 static const uint32_t temp_period_list[] = {3000, 20000, 60000, 300000};
+
 static const uint32_t chartPointList[] = {20, 40, 100};
 static const size_t temp_period_count = sizeof(temp_period_list) / sizeof(temp_period_list[0]);
 static size_t temp_period_selected_index = 0; // default selected 3000ms
@@ -78,33 +79,17 @@ static void temp_update_timer_cb(lv_timer_t *timer)
 {
     pcf85063a_datetime_t current_time = {};
     float t, h;
-    Shtc3_ReadTempHumi(&t, &h);
+
+    // Shtc3_ReadTempHumi(&t, &h);
+    Sht31_ReadTempHumi(&t, &h);
     if (t == -1000 || h == -1000)
     {
         ESP_LOGE(TAG, "Failed to read temperature and humidity");
         return;
     }
     pcf85063a_get_time_date(&pcf85063, &current_time);
+    
     user_data_t ud;
-    // if (simuFlag)
-    // {
-    //     t = simuTemp++;
-    //     t = simuTemp++;
-    //     if (simuTemp > 45)
-    //     {
-    //         simuFlag = 0;
-    //     }
-    // }
-    // else
-    // {
-    //     t = simuTemp--;
-    //     t = simuTemp--;
-    //     t = simuTemp--;
-    //     if (t < 20)
-    //     {
-    //         simuFlag = 1;
-    //     }
-    // }
 
     ud.temperature = t;
     ud.timestamp = current_time;
@@ -118,21 +103,10 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     {
         min_temp = t;
     }
-    // ESP_LOGI(TAG, "New temp: %ld", temp_sample_count);
+    ESP_LOGI(TAG, "Temp%ld: %.1f %.1f", temp_sample_count, t, h);
 }
 
-static void time_update_timer_cb(lv_timer_t *timer)
-{
-    pcf85063a_datetime_t current_time = {};
-    pcf85063a_get_time_date(&pcf85063, &current_time);
 
-    /* Only update the on-screen time when container 1 is visible */
-    if (!lv_obj_has_flag(scr_ui.container_home, LV_OBJ_FLAG_HIDDEN) && (overallInfoPageNumber == 1) && scr_ui.label_homeClock)
-    {
-        snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d:%02d:%02d", current_time.hour, current_time.min, current_time.sec);
-        lv_label_set_text(scr_ui.label_homeClock, Lvgl_buffer);
-    }
-}
 
 void UserApp_Init()
 {
@@ -164,6 +138,7 @@ void UserApp_Init()
     InitializeButtons();
     BoardAdc_Init();
     Shtc3_Init(i2c_bus);
+    Sht31_Init(i2c_bus);
     Touch_ISR_GPIO_Init();
     Codec_StartInit();
     user_data_t *buf = (user_data_t *)heap_caps_malloc(sizeof(user_data_t) * MAX_TEMP_FIFO_SIZE, MALLOC_CAP_SPIRAM);
@@ -346,10 +321,6 @@ void UserUi_Init()
     temp_timer = lv_timer_create(temp_update_timer_cb, temp_period_list[temp_period_active_index], NULL);
     lv_timer_set_repeat_count(temp_timer, -1);
     temp_update_timer_cb(0);
-    /* create 1s timer to update time label when container 1 is shown */
-    time_timer = lv_timer_create(time_update_timer_cb, 1000, NULL);
-    lv_timer_set_repeat_count(time_timer, -1);
-    time_update_timer_cb(0);
 }
 
 void UserApp_Start_Init()
@@ -384,6 +355,7 @@ void Led_LoopTask(void *arg)
         }
     }
 }
+
 
 uint16_t GetFloatY(float temp)
 {
@@ -430,14 +402,92 @@ uint16_t GetFloatY(float temp)
     return (uint16_t)y;
 }
 
-void Lvgl_LoopTask(void *arg)
+// don't handle locker or efficency
+void DoUpdateTimeBattery(void)
 {
-    uint32_t times = 0;
-    user_data_t temp_record[MAX_TEMP_FIFO_SIZE];
+    pcf85063a_datetime_t current_time = {};
+
+    if ((overallInfoPageNumber == 1) && scr_ui.label_homeClock)
+    {
+        pcf85063a_get_time_date(&pcf85063, &current_time);
+        snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d:%02d:%02d", current_time.hour, current_time.min, current_time.sec);
+        lv_label_set_text(scr_ui.label_homeClock, Lvgl_buffer);
+    }
+}
+
+void DoUpdateTempChart(void)
+{
     user_data_t tmpTemp;
     float temp = 0;
     float totalValue = 0;
 
+    user_data_t temp_record[MAX_TEMP_FIFO_SIZE];
+
+    fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
+    // dump all temperature data for debug
+    // for (int i = 0; i < MAX_TEMP_FIFO_SIZE; ++i)
+    // {
+    //     ESP_LOGI(TAG, "temp_record[%d]: temp=%.1f, time=%02d:%02d:%02d", i, temp_record[i].temperature, temp_record[i].timestamp.hour, temp_record[i].timestamp.min, temp_record[i].timestamp.sec);
+    // }
+
+    int point_count = (int)lv_chart_get_point_count(scr_ui.temp_chart);
+    ESP_LOGI(TAG, "Updating chart with %d points", point_count);
+    totalValue = 0;
+    for (int i = MAX_TEMP_FIFO_SIZE - point_count; i < MAX_TEMP_FIFO_SIZE; ++i)
+    {
+        temp = temp_record[i].temperature;
+        totalValue += temp;
+        temp = (temp - TEMP_OFFSET) * TEMP_SCALER;
+        lv_chart_set_next_value(scr_ui.temp_chart, scr_ui.temp_series, temp);
+    }
+    ESP_LOGI(TAG, "Total temp value: %.1f", totalValue);
+
+    totalValue = totalValue / point_count + 0.5;
+    TEMP_OFFSET = (uint16_t)((totalValue * 0.8) * 0.2 + TEMP_OFFSET * 0.8);
+    ESP_LOGI(TAG, "Updated TEMP_OFFSET: %u", TEMP_OFFSET);
+
+    lv_obj_invalidate(scr_ui.temp_chart);
+    char buf[128] = "";
+
+    int lastIndex = MAX_TEMP_FIFO_SIZE - 1;
+    int firstIndex = lastIndex - point_count;
+    if (firstIndex < 0)
+    {
+        firstIndex = 0;
+    }
+
+    tmpTemp = temp_record[firstIndex];
+    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%02d:%02d:%02d", tmpTemp.timestamp.hour, tmpTemp.timestamp.min, tmpTemp.timestamp.sec);
+
+    tmpTemp = temp_record[lastIndex];
+    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "              %02d:%02d:%02d", tmpTemp.timestamp.hour, tmpTemp.timestamp.min, tmpTemp.timestamp.sec);
+    if (scr_ui.lable_tempStatics)
+    {
+        lv_label_set_text(scr_ui.lable_tempStatics, buf);
+    }
+
+    /* Position small labels near first and last visible chart points inside the chart area */
+    if (scr_ui.lable_tempStart && scr_ui.lable_tempEnd && scr_ui.temp_chart)
+    {
+        char pbuf[32];
+        int yy_first = GetFloatY(temp_record[firstIndex].temperature);
+        int yy_last = GetFloatY(temp_record[lastIndex].temperature);
+
+        snprintf(pbuf, sizeof(pbuf), "%.1f", temp_record[firstIndex].temperature);
+        lv_label_set_text(scr_ui.lable_tempStart, pbuf);
+        lv_obj_set_pos(scr_ui.lable_tempStart, 5, yy_first);
+        // lv_obj_clear_flag(scr_ui.lable_tempStart, LV_OBJ_FLAG_HIDDEN);
+
+        snprintf(pbuf, sizeof(pbuf), "%.1f", temp_record[lastIndex].temperature);
+        lv_label_set_text(scr_ui.lable_tempEnd, pbuf);
+        lv_obj_set_pos(scr_ui.lable_tempEnd, 165, yy_last);
+        // lv_obj_clear_flag(scr_ui.lable_tempEnd, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+
+void Lvgl_LoopTask(void *arg)
+{
     // use current time as system time
     // pcf85063a_datetime_t datatime = {};
     // datatime.year = 2026;
@@ -462,89 +512,26 @@ void Lvgl_LoopTask(void *arg)
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
-        times++;
-        if (times < 10)
+
+        // if (!Lvgl_lock(500))
+        if (!Lvgl_lock(portMAX_DELAY))
         {
             continue;
         }
-        times = 0;
 
-        fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
-        // dump all temperature data for debug
-        // for (int i = 0; i < MAX_TEMP_FIFO_SIZE; ++i)
-        // {
-        //     ESP_LOGI(TAG, "temp_record[%d]: temp=%.1f, time=%02d:%02d:%02d", i, temp_record[i].temperature, temp_record[i].timestamp.hour, temp_record[i].timestamp.min, temp_record[i].timestamp.sec);
-        // }
-
-        // update temperature chart with temp_record buffer
-        if (Lvgl_lock(portMAX_DELAY))
+        // update time, battery state
+        if (!lv_obj_has_flag(scr_ui.container_home, LV_OBJ_FLAG_HIDDEN))
         {
-            int point_count = (int)lv_chart_get_point_count(scr_ui.temp_chart);
-            ESP_LOGI(TAG, "Updating chart with %d points", point_count);
-            totalValue = 0;
-            for (int i = MAX_TEMP_FIFO_SIZE - point_count; i < MAX_TEMP_FIFO_SIZE; ++i)
-            {
-                temp = temp_record[i].temperature;
-                totalValue += temp;
-                temp = (temp - TEMP_OFFSET) * TEMP_SCALER;
-                lv_chart_set_next_value(scr_ui.temp_chart, scr_ui.temp_series, temp);
-            }
-            ESP_LOGI(TAG, "Total temp value: %.1f", totalValue);
-
-            totalValue = totalValue / point_count + 0.5;
-            TEMP_OFFSET = (uint16_t)((totalValue * 0.8) * 0.2 + TEMP_OFFSET * 0.8);
-            ESP_LOGI(TAG, "Updated TEMP_OFFSET: %u", TEMP_OFFSET);
-
-            // if the container 1 is showing, then update the label text, otherwise do nothing.
-            if (!lv_obj_has_flag(scr_ui.container_tempChart, LV_OBJ_FLAG_HIDDEN))
-            {
-                lv_obj_invalidate(scr_ui.temp_chart);
-                char buf[128] = "";
-
-                int lastIndex = MAX_TEMP_FIFO_SIZE - 1;
-                int firstIndex = lastIndex - point_count;
-                if (firstIndex < 0)
-                {
-                    firstIndex = 0;
-                }
-
-                tmpTemp = temp_record[firstIndex];
-                snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%02d:%02d:%02d", tmpTemp.timestamp.hour, tmpTemp.timestamp.min, tmpTemp.timestamp.sec);
-
-                tmpTemp = temp_record[lastIndex];
-                snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "              %02d:%02d:%02d", tmpTemp.timestamp.hour, tmpTemp.timestamp.min, tmpTemp.timestamp.sec);
-                if (scr_ui.lable_tempStatics)
-                {
-                    lv_label_set_text(scr_ui.lable_tempStatics, buf);
-                }
-
-                /* Position small labels near first and last visible chart points inside the chart area */
-                if (scr_ui.lable_tempStart && scr_ui.lable_tempEnd && scr_ui.temp_chart)
-                {
-                    char pbuf[32];
-                    int yy_first = GetFloatY(temp_record[firstIndex].temperature);
-                    int yy_last = GetFloatY(temp_record[lastIndex].temperature);
-
-                    snprintf(pbuf, sizeof(pbuf), "%.1f", temp_record[firstIndex].temperature);
-                    lv_label_set_text(scr_ui.lable_tempStart, pbuf);
-                    lv_obj_set_pos(scr_ui.lable_tempStart, 5, yy_first);
-                    // lv_obj_clear_flag(scr_ui.lable_tempStart, LV_OBJ_FLAG_HIDDEN);
-
-                    snprintf(pbuf, sizeof(pbuf), "%.1f", temp_record[lastIndex].temperature);
-                    lv_label_set_text(scr_ui.lable_tempEnd, pbuf);
-                    lv_obj_set_pos(scr_ui.lable_tempEnd, 165, yy_last);
-                    // lv_obj_clear_flag(scr_ui.lable_tempEnd, LV_OBJ_FLAG_HIDDEN);
-                }
-                // print log for debug
-                // ESP_LOGI(TAG, "chart updated");
-            }
-            // else // redraw the chart of temperature data
-            // {
-
-            //     ESP_LOGI(TAG, "chart is hidden");
-            // }
-            Lvgl_unlock();
+            DoUpdateTimeBattery();
         }
+
+        // update temp chart or list
+        if (!lv_obj_has_flag(scr_ui.container_tempChart, LV_OBJ_FLAG_HIDDEN))
+        {
+            DoUpdateTempChart();
+        }
+
+        Lvgl_unlock();
     }
 }
 
@@ -653,7 +640,7 @@ void ButtonEvent_BootKeyClick(void)
             for (int i = 0; i < 10; ++i)
             {
                 user_data_t record = temp_record[beginIndex + i];
-                snprintf(record_buf, sizeof(record_buf), "%02d:%02d:%02d>%.1f°C\n", record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
+                snprintf(record_buf, sizeof(record_buf), "%02d  %02d:%02d:%02d>%.1f°C\n", i+1, record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
                 strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
             }
         }

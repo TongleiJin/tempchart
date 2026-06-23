@@ -12,6 +12,7 @@ partition_table/
 
 # 组件管理器生成的文件
 managed_components/
+DHTC12-example/
 dependencies.lock
 
 # IDE 和编辑器文件
@@ -51,4 +52,5 @@ __pycache__/
 *.backup
 *.bak
 *~
+DHTC12-manual.pdf
 
