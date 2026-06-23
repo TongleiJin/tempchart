@@ -48,7 +48,7 @@ static float max_temp = 0;
 static float min_temp = 100;
 
 static lv_timer_t *temp_timer = NULL;
-static const uint32_t temp_period_list[] = {3, 20, 60, 300};
+static const uint32_t temp_period_list[] = {3000, 20000, 60000, 300000};
 
 static const uint32_t chartPointList[] = {20, 40, 100};
 static const size_t temp_period_count = sizeof(temp_period_list) / sizeof(temp_period_list[0]);
@@ -69,7 +69,6 @@ void Lvgl_LoopTask(void *arg);
 void InitializeButtons(void); /* button 初始化 */
 void Button_LoopTask(void *arg);
 void Touch_LoopTask(void *arg);
-void Sht31_LoopTask(void *arg);
 static void gpio_isr_handler(void *arg);
 void Touch_ISR_GPIO_Init();
 
@@ -104,7 +103,7 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     {
         min_temp = t;
     }
-    // ESP_LOGI(TAG, "New temp: %ld", temp_sample_count);
+    ESP_LOGI(TAG, "Temp%ld: %.1f %.1f", temp_sample_count, t, h);
 }
 
 
@@ -330,7 +329,6 @@ void UserApp_Start_Init()
     xTaskCreatePinnedToCore(Lvgl_LoopTask, "Lvgl_LoopTask", 5 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Button_LoopTask, "Button_LoopTask", 4 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Touch_LoopTask, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(Sht31_LoopTask, "Sht31_LoopTask", 4 * 1024, NULL, 5, NULL, 1);
 }
 
 void Led_LoopTask(void *arg)
@@ -358,23 +356,6 @@ void Led_LoopTask(void *arg)
     }
 }
 
-void Sht31_LoopTask(void *arg)
-{
-    float t = 0.0f, h = 0.0f;
-    for (;;)
-    {
-        Sht31_ReadTempHumi(&t, &h);
-        if (t == -1000 || h == -1000)
-        {
-            ESP_LOGE(TAG, "SHT31 read failed");
-        }
-        else
-        {
-            ESP_LOGE(TAG, "SHT31 T=%.2f C  H=%.2f %%", t, h);
-        }
-        vTaskDelay(pdMS_TO_TICKS(2000)); // read every 2s
-    }
-}
 
 uint16_t GetFloatY(float temp)
 {
@@ -659,7 +640,7 @@ void ButtonEvent_BootKeyClick(void)
             for (int i = 0; i < 10; ++i)
             {
                 user_data_t record = temp_record[beginIndex + i];
-                snprintf(record_buf, sizeof(record_buf), "%02d:%02d:%02d>%.1f°C\n", record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
+                snprintf(record_buf, sizeof(record_buf), "%02d  %02d:%02d:%02d>%.1f°C\n", i+1, record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
                 strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
             }
         }
