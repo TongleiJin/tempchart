@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <driver/gpio.h>
 #include <esp_log.h>
 #include "user_app.h"
@@ -35,6 +36,9 @@ static char Lvgl_buffer[60];
 static QueueHandle_t gpio_evt_queue = NULL;
 static uint8_t *audio_data_ptr = NULL;
 QueueHandle_t xTempDataQueue = NULL;
+static SemaphoreHandle_t temp_read_mutex = NULL;
+
+static bool ReadTempHumi(float *temperature, float *humidity);
 
 static int settingTarget = 0;
 
@@ -72,21 +76,67 @@ void Touch_LoopTask(void *arg);
 static void gpio_isr_handler(void *arg);
 void Touch_ISR_GPIO_Init();
 
-// int simuTemp = 25;
-// int simuFlag = 0;
+static bool ReadTempHumi(float *temperature, float *humidity)
+{
+    if (!temperature || !humidity)
+    {
+        return false;
+    }
+
+    if (!temp_read_mutex)
+    {
+        return false;
+    }
+
+    if (xSemaphoreTake(temp_read_mutex, portMAX_DELAY) != pdTRUE)
+    {
+        return false;
+    }
+
+    bool success = false;
+    float t = -1000.0f;
+    float h = -1000.0f;
+
+    Shtc3_ReadTempHumi(&t, &h);
+    if (t != -1000.0f && h != -1000.0f)
+    {
+        success = true;
+    }
+    else
+    {
+        Sht31_ReadTempHumi(&t, &h);
+        if (t != -1000.0f && h != -1000.0f)
+        {
+            success = true;
+        }
+    }
+
+    if (success)
+    {
+        *temperature = t;
+        *humidity = h;
+    }
+
+    xSemaphoreGive(temp_read_mutex);
+    return success;
+}
+
+bool UserApp_ReadTempHumi(float *temperature, float *humidity)
+{
+    return ReadTempHumi(temperature, humidity);
+}
 
 static void temp_update_timer_cb(lv_timer_t *timer)
 {
     pcf85063a_datetime_t current_time = {};
     float t, h;
 
-    // Shtc3_ReadTempHumi(&t, &h);
-    Sht31_ReadTempHumi(&t, &h);
-    if (t == -1000 || h == -1000)
+    if (!ReadTempHumi(&t, &h))
     {
         ESP_LOGE(TAG, "Failed to read temperature and humidity");
         return;
     }
+
     pcf85063a_get_time_date(&pcf85063, &current_time);
     
     user_data_t ud;
@@ -139,6 +189,8 @@ void UserApp_Init()
     BoardAdc_Init();
     Shtc3_Init(i2c_bus);
     Sht31_Init(i2c_bus);
+    temp_read_mutex = xSemaphoreCreateMutex();
+    assert(temp_read_mutex);
     Touch_ISR_GPIO_Init();
     Codec_StartInit();
     user_data_t *buf = (user_data_t *)heap_caps_malloc(sizeof(user_data_t) * MAX_TEMP_FIFO_SIZE, MALLOC_CAP_SPIRAM);
@@ -149,10 +201,10 @@ void UserApp_Init()
 static void ShowOnlyContainer(int container_number)
 {
     lv_obj_t *containers[4] = {
-        scr_ui.container_home,
-        scr_ui.container_image,
-        scr_ui.container_setting,
         scr_ui.container_tempChart,
+        scr_ui.container_home,
+        scr_ui.container_setting,
+        scr_ui.container_image,
     };
 
     ESP_LOGI(TAG, "container: %d", container_number);
@@ -169,7 +221,7 @@ static void ShowOnlyContainer(int container_number)
             lv_obj_remove_flag(containers[container_number - 1], LV_OBJ_FLAG_HIDDEN);
         }
 
-        if (container_number == 3)
+        if (container_number == 3) // Setting page
         {
             char buf[80];
             if (settingTarget == 0)
@@ -187,7 +239,7 @@ static void ShowOnlyContainer(int container_number)
             }
         }
 
-        if (container_number == 4)
+        if (container_number == 1) // temp chart page
         {
             // unhidden temp chart
             lv_obj_remove_flag(scr_ui.temp_chart, LV_OBJ_FLAG_HIDDEN);
@@ -200,28 +252,40 @@ static void ShowOnlyContainer(int container_number)
 
         Lvgl_unlock();
     }
-    if (container_number == 1)
+    if (container_number == 2)
     {
         UpdateOverallInfoLabel();
     }
 }
 
+
 void UpdateOverallInfoLabel(void)
 {
-    if (!scr_ui.label_overall_info)
+    if (!scr_ui.label_homeMain)
     {
         return;
     }
     char buf[140] = "";
     if (overallInfoPageNumber == 1)
     {
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Power: %d%%", Get_Batterylevel());
         uint32_t active_s = temp_period_list[temp_period_active_index] / 1000;
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\n\nSample period: %lu", active_s);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Sample period: %lu", active_s);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sample_count);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset: %u", TEMP_OFFSET);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp scaler: %u", TEMP_SCALER);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nChart size: %lu", lv_chart_get_point_count(scr_ui.temp_chart));
+
+        float t = 0.0f;
+        float h = 0.0f;
+        if (ReadTempHumi(&t, &h))
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: %.1f°C\nHum: %.1f%%", t, h);
+        }
+        else
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: --°C\nHum: --%%");
+        }
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSIZE: %u", strlen(buf)+9);
     }
     else
     {
@@ -235,7 +299,7 @@ void UpdateOverallInfoLabel(void)
 
     if (Lvgl_lock(portMAX_DELAY))
     {
-        lv_label_set_text(scr_ui.label_overall_info, buf);
+        lv_label_set_text(scr_ui.label_homeMain, buf);
         Lvgl_unlock();
     }
 }
@@ -275,7 +339,6 @@ static void TouchContainer_ActivatePeriod(void)
 
 static void TouchContainer_CancelSelection(void)
 {
-
     char buf[80] = "default";
     if (settingTarget == 0)
     {
@@ -406,12 +469,30 @@ uint16_t GetFloatY(float temp)
 void DoUpdateTimeBattery(void)
 {
     pcf85063a_datetime_t current_time = {};
-
-    if ((overallInfoPageNumber == 1) && scr_ui.label_homeClock)
+    
+    if ((overallInfoPageNumber == 1) && scr_ui.label_homeHeader)
     {
         pcf85063a_get_time_date(&pcf85063, &current_time);
-        snprintf(Lvgl_buffer, sizeof(Lvgl_buffer), "%02d:%02d:%02d", current_time.hour, current_time.min, current_time.sec);
-        lv_label_set_text(scr_ui.label_homeClock, Lvgl_buffer);
+        uint8_t batLevel = Get_Batterylevel();
+        if (batLevel > 95)
+        {
+            strcpy(Lvgl_buffer, LV_SYMBOL_BATTERY_FULL);
+        }
+        else if (batLevel > 75)
+        {
+            strcpy(Lvgl_buffer, LV_SYMBOL_BATTERY_3);
+        }
+        else if (batLevel > 50)
+        {
+            strcpy(Lvgl_buffer, LV_SYMBOL_BATTERY_2);
+        }
+        else
+        {
+            strcpy(Lvgl_buffer, LV_SYMBOL_BATTERY_1);
+        }
+
+        snprintf(Lvgl_buffer+strlen(Lvgl_buffer), sizeof(Lvgl_buffer), " %d%%   %02d:%02d:%02d", batLevel, current_time.hour, current_time.min, current_time.sec);
+        lv_label_set_text(scr_ui.label_homeHeader, Lvgl_buffer);
     }
 }
 
@@ -424,12 +505,6 @@ void DoUpdateTempChart(void)
     user_data_t temp_record[MAX_TEMP_FIFO_SIZE];
 
     fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
-    // dump all temperature data for debug
-    // for (int i = 0; i < MAX_TEMP_FIFO_SIZE; ++i)
-    // {
-    //     ESP_LOGI(TAG, "temp_record[%d]: temp=%.1f, time=%02d:%02d:%02d", i, temp_record[i].temperature, temp_record[i].timestamp.hour, temp_record[i].timestamp.min, temp_record[i].timestamp.sec);
-    // }
-
     int point_count = (int)lv_chart_get_point_count(scr_ui.temp_chart);
     ESP_LOGI(TAG, "Updating chart with %d points", point_count);
     totalValue = 0;
@@ -476,12 +551,10 @@ void DoUpdateTempChart(void)
         snprintf(pbuf, sizeof(pbuf), "%.1f", temp_record[firstIndex].temperature);
         lv_label_set_text(scr_ui.lable_tempStart, pbuf);
         lv_obj_set_pos(scr_ui.lable_tempStart, 5, yy_first);
-        // lv_obj_clear_flag(scr_ui.lable_tempStart, LV_OBJ_FLAG_HIDDEN);
 
         snprintf(pbuf, sizeof(pbuf), "%.1f", temp_record[lastIndex].temperature);
         lv_label_set_text(scr_ui.lable_tempEnd, pbuf);
         lv_obj_set_pos(scr_ui.lable_tempEnd, 165, yy_last);
-        // lv_obj_clear_flag(scr_ui.lable_tempEnd, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -578,7 +651,7 @@ void ButtonEvent_PowerKeyClick(void)
 
 void ButtonEvent_PowerKeyDoubleClick(void)
 {
-    ShowOnlyContainer(4);
+    ShowOnlyContainer(1);
 }
 
 void ButtonEvent_PowerKeyLongPress(void)
@@ -662,7 +735,7 @@ void ButtonEvent_BootKeyClick(void)
 
 void ButtonEvent_BootKeyDoubleClick(void)
 {
-    ShowOnlyContainer(1);
+    ShowOnlyContainer(2);
 }
 
 void ButtonEvent_BootKeyLongPress(void)

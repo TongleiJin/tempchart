@@ -26,14 +26,7 @@ static void set_label_style(lv_obj_t *label, lv_color_t color, int font_size)
     lv_obj_set_style_bg_opa(label, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(label, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_width(label, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
-    
-    // 使用存在的字体
-    // if (font_size == 17) {
-    //     lv_obj_set_style_text_font(label, &lv_font_montserratMedium_17, LV_PART_MAIN|LV_STATE_DEFAULT);
-    // } else {
-        // 使用默认字体或存在的字体
-        lv_obj_set_style_text_font(label, &lv_font_montserratMedium_12, LV_PART_MAIN|LV_STATE_DEFAULT);
-    // }
+    lv_obj_set_style_text_font(label, &lv_font_montserratMedium_12, LV_PART_MAIN|LV_STATE_DEFAULT);
 }
 
 // 辅助函数：创建基础容器
@@ -108,23 +101,20 @@ void setup_scr_screen(lv_factest_ui *ui)
     // 容器 1：欢迎信息
     ui->container_home = create_base_container(ui->screen, 0, 0, 200, 200, false);
     
-    ui->label_overall_info = lv_label_create(ui->container_home);
-    lv_obj_set_pos(ui->label_overall_info, 10, 30);
-    lv_obj_set_size(ui->label_overall_info, 180, 140);
-    lv_label_set_long_mode(ui->label_overall_info, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(ui->label_overall_info, "Starting...");
-    lv_obj_set_style_text_align(ui->label_overall_info, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_style_text_color(ui->label_overall_info, lv_color_hex(0x000000), LV_PART_MAIN);
-    set_label_style(ui->label_overall_info, lv_color_hex(0x000000), 14);
+    ui->label_homeMain = lv_label_create(ui->container_home);
+    lv_obj_set_pos(ui->label_homeMain, 6, 35);
+    lv_obj_set_size(ui->label_homeMain, 180, 140);
+    lv_label_set_long_mode(ui->label_homeMain, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(ui->label_homeMain, "Updating...");
 
-    ui->label_homeClock = lv_label_create(ui->container_home);
-    lv_label_set_text(ui->label_homeClock, "");
-    set_label_style(ui->label_homeClock, lv_color_hex(0x000000), 12);
-    lv_obj_align(ui->label_homeClock, LV_ALIGN_TOP_RIGHT, -6, 4);
+    ui->label_homeHeader = lv_label_create(ui->container_home);
+    set_label_style(ui->label_homeHeader, lv_color_hex(0x000000), 12);
+    lv_obj_align(ui->label_homeHeader, LV_ALIGN_TOP_LEFT, 2, 4);
+    lv_obj_set_style_text_font(ui->label_homeHeader, &lv_font_montserratMedium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_label_set_text(ui->label_homeHeader, LV_SYMBOL_BATTERY_1);
     
     // 容器 2：图片显示
     ui->container_image = create_base_container(ui->screen, 0, 0, 200, 200, true);
-    
     ui->screen_img_5 = lv_image_create(ui->container_image);
     lv_obj_set_pos(ui->screen_img_5, 0, 0);
     lv_obj_set_size(ui->screen_img_5, 200, 200);
@@ -204,6 +194,7 @@ void setup_scr_screen(lv_factest_ui *ui)
     lv_obj_set_pos(ui->lable_tempDetail, 0, 0);
     lv_obj_set_size(ui->lable_tempDetail, 200, 200);
     lv_label_set_long_mode(ui->lable_tempDetail, LV_LABEL_LONG_WRAP);
+    lv_obj_add_flag(ui->lable_tempDetail, LV_OBJ_FLAG_HIDDEN);
     
     // 更新布局
     lv_obj_update_layout(ui->screen);
