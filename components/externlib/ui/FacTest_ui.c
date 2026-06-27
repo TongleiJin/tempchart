@@ -101,17 +101,17 @@ void setup_scr_screen(lv_factest_ui *ui)
     // 容器 1：欢迎信息
     ui->container_home = create_base_container(ui->screen, 0, 0, 200, 200, false);
     
-    ui->label_homeMain = lv_label_create(ui->container_home);
-    lv_obj_set_pos(ui->label_homeMain, 6, 35);
-    lv_obj_set_size(ui->label_homeMain, 180, 140);
-    lv_label_set_long_mode(ui->label_homeMain, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(ui->label_homeMain, "Updating...");
+    ui->label_home_main_info = lv_label_create(ui->container_home);
+    lv_obj_set_pos(ui->label_home_main_info, 6, 35);
+    lv_obj_set_size(ui->label_home_main_info, 180, 140);
+    lv_label_set_long_mode(ui->label_home_main_info, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(ui->label_home_main_info, "Updating...");
 
-    ui->label_homeHeader = lv_label_create(ui->container_home);
-    set_label_style(ui->label_homeHeader, lv_color_hex(0x000000), 12);
-    lv_obj_align(ui->label_homeHeader, LV_ALIGN_TOP_LEFT, 2, 4);
-    lv_obj_set_style_text_font(ui->label_homeHeader, &lv_font_montserratMedium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
-    lv_label_set_text(ui->label_homeHeader, LV_SYMBOL_BATTERY_1);
+    ui->label_home_header = lv_label_create(ui->container_home);
+    set_label_style(ui->label_home_header, lv_color_hex(0x000000), 12);
+    lv_obj_align(ui->label_home_header, LV_ALIGN_TOP_LEFT, 2, 4);
+    lv_obj_set_style_text_font(ui->label_home_header, &lv_font_montserratMedium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_label_set_text(ui->label_home_header, LV_SYMBOL_BATTERY_1);
     
     // 容器 2：图片显示
     ui->container_image = create_base_container(ui->screen, 0, 0, 200, 200, true);
@@ -129,14 +129,14 @@ void setup_scr_screen(lv_factest_ui *ui)
     ui->container_setting = create_base_container(ui->screen, 0, 0, 200, 200, true);
     
     // 按钮标签
-    ui->label_touchEvent = lv_label_create(ui->container_setting);
-    lv_obj_set_pos(ui->label_touchEvent, 5, 86);
-    lv_obj_set_size(ui->label_touchEvent, 189, 25);
-    lv_label_set_text(ui->label_touchEvent, "");
-    lv_label_set_long_mode(ui->label_touchEvent, LV_LABEL_LONG_WRAP);
-    set_label_style(ui->label_touchEvent, lv_color_hex(0x000000), 17);
-    lv_obj_set_style_text_align(ui->label_touchEvent, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN|LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_top(ui->label_touchEvent, 3, LV_PART_MAIN|LV_STATE_DEFAULT);
+    ui->label_touch_event = lv_label_create(ui->container_setting);
+    lv_obj_set_pos(ui->label_touch_event, 5, 86);
+    lv_obj_set_size(ui->label_touch_event, 189, 25);
+    lv_label_set_text(ui->label_touch_event, "");
+    lv_label_set_long_mode(ui->label_touch_event, LV_LABEL_LONG_WRAP);
+    set_label_style(ui->label_touch_event, lv_color_hex(0x000000), 17);
+    lv_obj_set_style_text_align(ui->label_touch_event, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->label_touch_event, 3, LV_PART_MAIN|LV_STATE_DEFAULT);
     
     // 创建4个按钮
     create_button(ui->container_setting, 0, 0, 80, 80, "NEXT");
@@ -145,11 +145,11 @@ void setup_scr_screen(lv_factest_ui *ui)
     create_button(ui->container_setting, 119, 118, 80, 80, "CANCEL");
     
     // 温度图表容器
-    // ui->container_tempChart = lv_obj_create(ui->screen);
-    ui->container_tempChart = create_base_container(ui->screen, 0, 0, 200, 190, true);
+    // ui->container_temp_chart = lv_obj_create(ui->screen);
+    ui->container_temp_chart = create_base_container(ui->screen, 0, 0, 200, 190, true);
     
     // 图表
-    ui->temp_chart = lv_chart_create(ui->container_tempChart);
+    ui->temp_chart = lv_chart_create(ui->container_temp_chart);
     lv_obj_set_size(ui->temp_chart, 198, 160);
     lv_obj_align(ui->temp_chart, LV_ALIGN_TOP_MID, 0, 10);
     lv_chart_set_type(ui->temp_chart, LV_CHART_TYPE_LINE);
@@ -170,31 +170,31 @@ void setup_scr_screen(lv_factest_ui *ui)
         lv_chart_set_next_value(ui->temp_chart, ui->temp_series, 23);
     }
     
-    ui->lable_tempStatics = lv_label_create(ui->container_tempChart);
-    lv_obj_set_pos(ui->lable_tempStatics, 2, 175);
-    lv_obj_set_size(ui->lable_tempStatics, 180, 20);
-    lv_label_set_long_mode(ui->lable_tempStatics, LV_LABEL_LONG_DOT);
-    lv_label_set_text(ui->lable_tempStatics, "...");
+    ui->label_tempchart_time = lv_label_create(ui->container_temp_chart);
+    lv_obj_set_pos(ui->label_tempchart_time, 2, 175);
+    lv_obj_set_size(ui->label_tempchart_time, 180, 20);
+    lv_label_set_long_mode(ui->label_tempchart_time, LV_LABEL_LONG_DOT);
+    lv_label_set_text(ui->label_tempchart_time, "...");
 
-    ui->lable_tempStart = lv_label_create(ui->container_tempChart);
-    lv_obj_set_size(ui->lable_tempStart, 60, 14);
-    lv_label_set_long_mode(ui->lable_tempStart, LV_LABEL_LONG_DOT);
-    lv_label_set_text(ui->lable_tempStart, "");
-    set_label_style(ui->lable_tempStart, lv_color_hex(0x000000), 12);
-    lv_obj_add_flag(ui->lable_tempStart, LV_OBJ_FLAG_HIDDEN);
+    ui->label_start_temp = lv_label_create(ui->container_temp_chart);
+    lv_obj_set_size(ui->label_start_temp, 60, 14);
+    lv_label_set_long_mode(ui->label_start_temp, LV_LABEL_LONG_DOT);
+    lv_label_set_text(ui->label_start_temp, "");
+    set_label_style(ui->label_start_temp, lv_color_hex(0x000000), 12);
+    lv_obj_add_flag(ui->label_start_temp, LV_OBJ_FLAG_HIDDEN);
 
-    ui->lable_tempEnd = lv_label_create(ui->container_tempChart);
-    lv_obj_set_size(ui->lable_tempEnd, 60, 14);
-    lv_label_set_long_mode(ui->lable_tempEnd, LV_LABEL_LONG_DOT);
-    lv_label_set_text(ui->lable_tempEnd, "");
-    set_label_style(ui->lable_tempEnd, lv_color_hex(0x000000), 12);
-    lv_obj_add_flag(ui->lable_tempEnd, LV_OBJ_FLAG_HIDDEN);
+    ui->label_end_temp = lv_label_create(ui->container_temp_chart);
+    lv_obj_set_size(ui->label_end_temp, 60, 14);
+    lv_label_set_long_mode(ui->label_end_temp, LV_LABEL_LONG_DOT);
+    lv_label_set_text(ui->label_end_temp, "");
+    set_label_style(ui->label_end_temp, lv_color_hex(0x000000), 12);
+    lv_obj_add_flag(ui->label_end_temp, LV_OBJ_FLAG_HIDDEN);
 
-    ui->lable_tempDetail = lv_label_create(ui->container_tempChart);
-    lv_obj_set_pos(ui->lable_tempDetail, 0, 0);
-    lv_obj_set_size(ui->lable_tempDetail, 200, 200);
-    lv_label_set_long_mode(ui->lable_tempDetail, LV_LABEL_LONG_WRAP);
-    lv_obj_add_flag(ui->lable_tempDetail, LV_OBJ_FLAG_HIDDEN);
+    ui->label_temp_list = lv_label_create(ui->container_temp_chart);
+    lv_obj_set_pos(ui->label_temp_list, 0, 0);
+    lv_obj_set_size(ui->label_temp_list, 200, 200);
+    lv_label_set_long_mode(ui->label_temp_list, LV_LABEL_LONG_WRAP);
+    lv_obj_add_flag(ui->label_temp_list, LV_OBJ_FLAG_HIDDEN);
     
     // 更新布局
     lv_obj_update_layout(ui->screen);

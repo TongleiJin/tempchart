@@ -38,7 +38,7 @@ static uint8_t *audio_data_ptr = NULL;
 QueueHandle_t xTempDataQueue = NULL;
 static SemaphoreHandle_t temp_read_mutex = NULL;
 
-static bool ReadTempHumi(float *temperature, float *humidity);
+static bool read_temp_humidity(float *temperature, float *humidity);
 
 static int settingTarget = 0;
 
@@ -67,16 +67,16 @@ const uint16_t TEMP_SCALER = 3;
 // define the fifo for user data, with a capacity of 100 records
 static liteFifo_t tempDataFifo;
 
-static void UpdateOverallInfoLabel(void);
-void Led_LoopTask(void *arg);
-void Lvgl_LoopTask(void *arg);
+static void update_overall_label(void);
+void Task_led_loop(void *arg);
+void Task_lvgl_loop(void *arg);
 void InitializeButtons(void); /* button 初始化 */
-void Button_LoopTask(void *arg);
-void Touch_LoopTask(void *arg);
+void Task_key_loop(void *arg);
+void Task_touch_loop(void *arg);
 static void gpio_isr_handler(void *arg);
 void Touch_ISR_GPIO_Init();
 
-static bool ReadTempHumi(float *temperature, float *humidity)
+static bool read_temp_humidity(float *temperature, float *humidity)
 {
     if (!temperature || !humidity)
     {
@@ -121,17 +121,14 @@ static bool ReadTempHumi(float *temperature, float *humidity)
     return success;
 }
 
-bool UserApp_ReadTempHumi(float *temperature, float *humidity)
-{
-    return ReadTempHumi(temperature, humidity);
-}
+
 
 static void temp_update_timer_cb(lv_timer_t *timer)
 {
     pcf85063a_datetime_t current_time = {};
     float t, h;
 
-    if (!ReadTempHumi(&t, &h))
+    if (!read_temp_humidity(&t, &h))
     {
         ESP_LOGE(TAG, "Failed to read temperature and humidity");
         return;
@@ -198,10 +195,10 @@ void UserApp_Init()
     fifo_CreateLiteFifo(&tempDataFifo, MAX_TEMP_FIFO_SIZE, buf);
 }
 
-static void ShowOnlyContainer(int container_number)
+static void show_container(int container_number)
 {
     lv_obj_t *containers[4] = {
-        scr_ui.container_tempChart,
+        scr_ui.container_temp_chart,
         scr_ui.container_home,
         scr_ui.container_setting,
         scr_ui.container_image,
@@ -212,7 +209,7 @@ static void ShowOnlyContainer(int container_number)
     if (Lvgl_lock(portMAX_DELAY))
     {
         // make all containers hidden first
-        lv_obj_add_flag(scr_ui.container_tempChart, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(scr_ui.container_temp_chart, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(scr_ui.container_home, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(scr_ui.container_image, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(scr_ui.container_setting, LV_OBJ_FLAG_HIDDEN);
@@ -229,13 +226,13 @@ static void ShowOnlyContainer(int container_number)
                 // print current selected sample interval to the label
                 uint32_t selected = temp_period_list[temp_period_selected_index] / 1000;
                 snprintf(buf, sizeof(buf), "Sample Intv Sel:%lu", selected);
-                lv_label_set_text(scr_ui.label_touchEvent, buf);
+                lv_label_set_text(scr_ui.label_touch_event, buf);
             }
             else if (settingTarget == 1)
             {
                 // print current selected chart point count to the label
                 snprintf(buf, sizeof(buf), "Chart Point Sel:%lu", chartPointList[chartPointsSelectedIndex]);
-                lv_label_set_text(scr_ui.label_touchEvent, buf);
+                lv_label_set_text(scr_ui.label_touch_event, buf);
             }
         }
 
@@ -243,10 +240,10 @@ static void ShowOnlyContainer(int container_number)
         {
             // unhidden temp chart
             lv_obj_remove_flag(scr_ui.temp_chart, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_remove_flag(scr_ui.lable_tempStatics, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_remove_flag(scr_ui.lable_tempStart, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_remove_flag(scr_ui.lable_tempEnd, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(scr_ui.lable_tempDetail, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(scr_ui.label_tempchart_time, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(scr_ui.label_start_temp, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(scr_ui.label_end_temp, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(scr_ui.label_temp_list, LV_OBJ_FLAG_HIDDEN);
             tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE;
         }
 
@@ -255,7 +252,7 @@ static void ShowOnlyContainer(int container_number)
 }
 
 
-void UpdateOverallInfoLabel(void)
+void update_overall_label(void)
 {
     char buf[140] = "";
     if (overallInfoPageNumber == 1)
@@ -269,7 +266,7 @@ void UpdateOverallInfoLabel(void)
 
         float t = 0.0f;
         float h = 0.0f;
-        if (ReadTempHumi(&t, &h))
+        if (read_temp_humidity(&t, &h))
         {
             snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: %.1f°C\nHum: %.1f%%", t, h);
         }
@@ -289,10 +286,10 @@ void UpdateOverallInfoLabel(void)
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPOWER DOUBLE: show chart");
     }
 
-    lv_label_set_text(scr_ui.label_homeMain, buf);
+    lv_label_set_text(scr_ui.label_home_main_info, buf);
 }
 
-static void TouchContainer_NextPeriod(void)
+static void touch_on_next(void)
 {
     char buf[80] = "default";
     if (settingTarget == 0)
@@ -306,10 +303,10 @@ static void TouchContainer_NextPeriod(void)
         chartPointsSelectedIndex = (chartPointsSelectedIndex + 1) % (sizeof(chartPointList) / sizeof(chartPointList[0]));
         snprintf(buf, sizeof(buf), "Chart Point Sel:%lu", chartPointList[chartPointsSelectedIndex]);
     }
-    lv_label_set_text(scr_ui.label_touchEvent, buf);
+    lv_label_set_text(scr_ui.label_touch_event, buf);
 }
 
-static void TouchContainer_ActivatePeriod(void)
+static void touch_on_active_button(void)
 {
     if (settingTarget == 0)
     {
@@ -322,10 +319,10 @@ static void TouchContainer_ActivatePeriod(void)
         lv_chart_set_point_count(scr_ui.temp_chart, chartPointList[chartPointsActiveIndex]);
     }
 
-    lv_label_set_text(scr_ui.label_touchEvent, "actived");
+    lv_label_set_text(scr_ui.label_touch_event, "actived");
 }
 
-static void TouchContainer_CancelSelection(void)
+static void touch_on_cancel_button(void)
 {
     char buf[80] = "default";
     if (settingTarget == 0)
@@ -333,17 +330,17 @@ static void TouchContainer_CancelSelection(void)
         temp_period_selected_index = temp_period_active_index;
         uint32_t selected = temp_period_list[temp_period_selected_index] / 1000;
         snprintf(buf, sizeof(buf), "Sample Intv | Sel:%lu", selected);
-        lv_label_set_text(scr_ui.label_touchEvent, buf);
+        lv_label_set_text(scr_ui.label_touch_event, buf);
     }
     else if (settingTarget == 1)
     {
         chartPointsSelectedIndex = chartPointsActiveIndex;
         snprintf(buf, sizeof(buf), "Chart Point | Sel:%lu", chartPointList[chartPointsSelectedIndex]);
     }
-    lv_label_set_text(scr_ui.label_touchEvent, buf);
+    lv_label_set_text(scr_ui.label_touch_event, buf);
 }
 
-static void TouchContainer_MoreSetting(void)
+static void touch_on_more_button(void)
 {
     if (settingTarget == 0)
     {
@@ -351,7 +348,7 @@ static void TouchContainer_MoreSetting(void)
         settingTarget = 1;
         char buf[80];
         snprintf(buf, sizeof(buf), "Chart Point Mode:%lu", chartPointList[chartPointsSelectedIndex]);
-        lv_label_set_text(scr_ui.label_touchEvent, buf);
+        lv_label_set_text(scr_ui.label_touch_event, buf);
     }
     else if (settingTarget == 1)
     {
@@ -359,7 +356,7 @@ static void TouchContainer_MoreSetting(void)
         char buf[80];
         uint32_t selected = temp_period_list[temp_period_selected_index] / 1000;
         snprintf(buf, sizeof(buf), "Sample Intv Mode:%lu", selected);
-        lv_label_set_text(scr_ui.label_touchEvent, buf);
+        lv_label_set_text(scr_ui.label_touch_event, buf);
     }
 }
 
@@ -368,7 +365,7 @@ void UserUi_Init()
     setup_factest_ui(&scr_ui);
 
     // Show only container 1 after power on.
-    ShowOnlyContainer(1);
+    show_container(1);
     temp_timer = lv_timer_create(temp_update_timer_cb, temp_period_list[temp_period_active_index], NULL);
     lv_timer_set_repeat_count(temp_timer, -1);
     temp_update_timer_cb(0);
@@ -376,13 +373,13 @@ void UserUi_Init()
 
 void UserApp_Start_Init()
 {
-    xTaskCreatePinnedToCore(Led_LoopTask, "Led_LoopTask", 4 * 1024, NULL, 4, NULL, 1);
-    xTaskCreatePinnedToCore(Lvgl_LoopTask, "Lvgl_LoopTask", 5 * 1024, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(Button_LoopTask, "Button_LoopTask", 4 * 1024, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(Touch_LoopTask, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(Task_led_loop, "Task_led_loop", 4 * 1024, NULL, 4, NULL, 1);
+    xTaskCreatePinnedToCore(Task_lvgl_loop, "Task_lvgl_loop", 5 * 1024, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(Task_key_loop, "Task_key_loop", 4 * 1024, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(Task_touch_loop, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
 }
 
-void Led_LoopTask(void *arg)
+void Task_led_loop(void *arg)
 {
     gpio_config_t gpio_conf = {};
     gpio_conf.intr_type = GPIO_INTR_DISABLE;
@@ -408,7 +405,7 @@ void Led_LoopTask(void *arg)
 }
 
 
-uint16_t GetFloatY(float temp)
+uint16_t get_float_pos_y(float temp)
 {
     /* Map actual temperature value into chart Y using assumed chart range 20..45 */
     const float chart_temp_min = 20.0f;
@@ -454,11 +451,11 @@ uint16_t GetFloatY(float temp)
 }
 
 // don't handle locker or efficency
-void DoUpdateTimeBattery(void)
+void do_time_bat_update(void)
 {
     pcf85063a_datetime_t current_time = {};
     
-    if ((overallInfoPageNumber == 1) && scr_ui.label_homeHeader)
+    if ((overallInfoPageNumber == 1) && scr_ui.label_home_header)
     {
         pcf85063a_get_time_date(&pcf85063, &current_time);
         uint8_t batLevel = Get_Batterylevel();
@@ -480,11 +477,11 @@ void DoUpdateTimeBattery(void)
         }
 
         snprintf(Lvgl_buffer+strlen(Lvgl_buffer), sizeof(Lvgl_buffer), " %d%%   %02d:%02d:%02d", batLevel, current_time.hour, current_time.min, current_time.sec);
-        lv_label_set_text(scr_ui.label_homeHeader, Lvgl_buffer);
+        lv_label_set_text(scr_ui.label_home_header, Lvgl_buffer);
     }
 }
 
-void DoUpdateTempChart(void)
+void do_temp_chart_update(void)
 {
     user_data_t tmpTemp;
     float temp = 0;
@@ -521,33 +518,32 @@ void DoUpdateTempChart(void)
 
     tmpTemp = temp_record[firstIndex];
     snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%02d:%02d:%02d", tmpTemp.timestamp.hour, tmpTemp.timestamp.min, tmpTemp.timestamp.sec);
-
     tmpTemp = temp_record[lastIndex];
     snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "              %02d:%02d:%02d", tmpTemp.timestamp.hour, tmpTemp.timestamp.min, tmpTemp.timestamp.sec);
-    if (scr_ui.lable_tempStatics)
+    if (scr_ui.label_tempchart_time)
     {
-        lv_label_set_text(scr_ui.lable_tempStatics, buf);
+        lv_label_set_text(scr_ui.label_tempchart_time, buf);
     }
 
     /* Position small labels near first and last visible chart points inside the chart area */
-    if (scr_ui.lable_tempStart && scr_ui.lable_tempEnd && scr_ui.temp_chart)
+    if (scr_ui.label_start_temp && scr_ui.label_end_temp && scr_ui.temp_chart)
     {
         char pbuf[32];
-        int yy_first = GetFloatY(temp_record[firstIndex].temperature);
-        int yy_last = GetFloatY(temp_record[lastIndex].temperature);
+        int yy_first = get_float_pos_y(temp_record[firstIndex].temperature);
+        int yy_last = get_float_pos_y(temp_record[lastIndex].temperature);
 
         snprintf(pbuf, sizeof(pbuf), "%.1f", temp_record[firstIndex].temperature);
-        lv_label_set_text(scr_ui.lable_tempStart, pbuf);
-        lv_obj_set_pos(scr_ui.lable_tempStart, 5, yy_first);
+        lv_label_set_text(scr_ui.label_start_temp, pbuf);
+        lv_obj_set_pos(scr_ui.label_start_temp, 5, yy_first);
 
         snprintf(pbuf, sizeof(pbuf), "%.1f", temp_record[lastIndex].temperature);
-        lv_label_set_text(scr_ui.lable_tempEnd, pbuf);
-        lv_obj_set_pos(scr_ui.lable_tempEnd, 165, yy_last);
+        lv_label_set_text(scr_ui.label_end_temp, pbuf);
+        lv_obj_set_pos(scr_ui.label_end_temp, 165, yy_last);
     }
 }
 
 
-void Lvgl_LoopTask(void *arg)
+void Task_lvgl_loop(void *arg)
 {
     // use current time as system time
     // pcf85063a_datetime_t datatime = {};
@@ -563,11 +559,11 @@ void Lvgl_LoopTask(void *arg)
     pcf85063a_get_time_date(&pcf85063, &current_time);
 
     // update the first sample timestamp label
-    if (scr_ui.lable_tempDetail)
+    if (scr_ui.label_temp_list)
     {
         char buf[32];
         snprintf(buf, sizeof(buf), "FS: %02d-%02d %02d:%02d:%02d", current_time.month, current_time.day, current_time.hour, current_time.min, current_time.sec);
-        lv_label_set_text(scr_ui.lable_tempDetail, buf);
+        lv_label_set_text(scr_ui.label_temp_list, buf);
     }
 
     while (1)
@@ -583,16 +579,16 @@ void Lvgl_LoopTask(void *arg)
         // update time, battery state
         if (!lv_obj_has_flag(scr_ui.container_home, LV_OBJ_FLAG_HIDDEN))
         {
-            DoUpdateTimeBattery();
+            do_time_bat_update();
         }
 
         // update temp chart or list
-        if (!lv_obj_has_flag(scr_ui.container_tempChart, LV_OBJ_FLAG_HIDDEN))
+        if (!lv_obj_has_flag(scr_ui.container_temp_chart, LV_OBJ_FLAG_HIDDEN))
         {
-            DoUpdateTempChart();
+            do_temp_chart_update();
         }
 
-        UpdateOverallInfoLabel();
+        update_overall_label();
 
         Lvgl_unlock();
     }
@@ -636,12 +632,12 @@ void ButtonEvent_PowerKeyClick(void)
     static uint16_t click_count = 0;
     click_count++;
 
-    ShowOnlyContainer(click_count % 4 + 1);
+    show_container(click_count % 4 + 1);
 }
 
 void ButtonEvent_PowerKeyDoubleClick(void)
 {
-    ShowOnlyContainer(1);
+    show_container(1);
 }
 
 void ButtonEvent_PowerKeyLongPress(void)
@@ -659,23 +655,23 @@ void ButtonEvent_BootKeyClick(void)
     }
 
     // for container 4
-    if (!lv_obj_has_flag(scr_ui.container_tempChart, LV_OBJ_FLAG_HIDDEN))
+    if (!lv_obj_has_flag(scr_ui.container_temp_chart, LV_OBJ_FLAG_HIDDEN))
     {
-        // hide chart and static lable
+        // hide chart and static label
         if (Lvgl_lock(portMAX_DELAY))
         {
-            // hide chart and static lable
+            // hide chart and static label
             if (scr_ui.temp_chart)
                 lv_obj_add_flag(scr_ui.temp_chart, LV_OBJ_FLAG_HIDDEN);
-            if (scr_ui.lable_tempStatics)
-                lv_obj_add_flag(scr_ui.lable_tempStatics, LV_OBJ_FLAG_HIDDEN);
-            if (scr_ui.lable_tempStart)
-                lv_obj_add_flag(scr_ui.lable_tempStart, LV_OBJ_FLAG_HIDDEN);
-            if (scr_ui.lable_tempEnd)
-                lv_obj_add_flag(scr_ui.lable_tempEnd, LV_OBJ_FLAG_HIDDEN);
-            // remove detail hidden flag to show the detail lable
-            if (scr_ui.lable_tempDetail)
-                lv_obj_remove_flag(scr_ui.lable_tempDetail, LV_OBJ_FLAG_HIDDEN);
+            if (scr_ui.label_tempchart_time)
+                lv_obj_add_flag(scr_ui.label_tempchart_time, LV_OBJ_FLAG_HIDDEN);
+            if (scr_ui.label_start_temp)
+                lv_obj_add_flag(scr_ui.label_start_temp, LV_OBJ_FLAG_HIDDEN);
+            if (scr_ui.label_end_temp)
+                lv_obj_add_flag(scr_ui.label_end_temp, LV_OBJ_FLAG_HIDDEN);
+            // remove detail hidden flag to show the detail label
+            if (scr_ui.label_temp_list)
+                lv_obj_remove_flag(scr_ui.label_temp_list, LV_OBJ_FLAG_HIDDEN);
             Lvgl_unlock();
         }
 
@@ -710,7 +706,7 @@ void ButtonEvent_BootKeyClick(void)
         ESP_LOGI(TAG, "size of detail: %d, content: \n%s", strlen(buf), buf);
         if (Lvgl_lock(portMAX_DELAY))
         {
-            lv_label_set_text(scr_ui.lable_tempDetail, buf);
+            lv_label_set_text(scr_ui.label_temp_list, buf);
             Lvgl_unlock();
         }
 
@@ -723,14 +719,14 @@ void ButtonEvent_BootKeyClick(void)
 
 void ButtonEvent_BootKeyDoubleClick(void)
 {
-    ShowOnlyContainer(2);
+    show_container(2);
 }
 
 void ButtonEvent_BootKeyLongPress(void)
 {
 }
 
-void Button_LoopTask(void *arg)
+void Task_key_loop(void *arg)
 {
     for (;;)
     {
@@ -763,7 +759,7 @@ void Button_LoopTask(void *arg)
     }
 }
 
-void Touch_LoopTask(void *arg)
+void Task_touch_loop(void *arg)
 {
     uint32_t io_num;
     for (;;)
@@ -784,7 +780,7 @@ void Touch_LoopTask(void *arg)
                     ESP_LOGI(TAG, "Touch button event: NEXT PERIOD clicked at (%d,%d)", x, y);
                     if (Lvgl_lock(portMAX_DELAY))
                     {
-                        TouchContainer_NextPeriod();
+                        touch_on_next();
                         Lvgl_unlock();
                     }
                 }
@@ -793,7 +789,7 @@ void Touch_LoopTask(void *arg)
                     ESP_LOGI(TAG, "Touch button event: ACTIVATE clicked at (%d,%d)", x, y);
                     if (Lvgl_lock(portMAX_DELAY))
                     {
-                        TouchContainer_ActivatePeriod();
+                        touch_on_active_button();
                         Lvgl_unlock();
                     }
                 }
@@ -802,7 +798,7 @@ void Touch_LoopTask(void *arg)
                     ESP_LOGI(TAG, "Touch button event: MORE SETTING clicked at (%d,%d)", x, y);
                     if (Lvgl_lock(portMAX_DELAY))
                     {
-                        TouchContainer_MoreSetting();
+                        touch_on_more_button();
                         Lvgl_unlock();
                     }
                 }
@@ -811,7 +807,7 @@ void Touch_LoopTask(void *arg)
                     ESP_LOGI(TAG, "Touch button event: CANCEL clicked at (%d,%d)", x, y);
                     if (Lvgl_lock(portMAX_DELAY))
                     {
-                        TouchContainer_CancelSelection();
+                        touch_on_cancel_button();
                         Lvgl_unlock();
                     }
                 }

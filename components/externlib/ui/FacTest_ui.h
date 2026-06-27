@@ -13,14 +13,14 @@ extern "C"
 		bool screen_del;
 
 		lv_obj_t *container_home;
-		lv_obj_t *label_homeMain;
-		lv_obj_t *label_homeHeader;
+		lv_obj_t *label_home_main_info;
+		lv_obj_t *label_home_header;
 
 		lv_obj_t *container_image;
 		lv_obj_t *screen_img_5;
 
 		lv_obj_t *container_setting;
-		lv_obj_t *label_touchEvent;
+		lv_obj_t *label_touch_event;
 		lv_obj_t *screen_btn_4;
 		lv_obj_t *screen_btn_4_label;
 		lv_obj_t *screen_btn_3;
@@ -30,11 +30,11 @@ extern "C"
 		lv_obj_t *screen_btn_1;
 		lv_obj_t *screen_btn_1_label;
 
-		lv_obj_t *container_tempChart;
-		lv_obj_t *lable_tempDetail;
-		lv_obj_t *lable_tempStatics;
-		lv_obj_t *lable_tempStart;
-		lv_obj_t *lable_tempEnd;
+		lv_obj_t *container_temp_chart;
+		lv_obj_t *label_temp_list;
+		lv_obj_t *label_tempchart_time;
+		lv_obj_t *label_start_temp;
+		lv_obj_t *label_end_temp;
 		lv_obj_t *temp_chart;
 		lv_chart_series_t *temp_series;
 		
