@@ -20,6 +20,7 @@
 #include "esp_timer.h"
 #include "user_data_type.h"
 #include "lite_fifo.h"
+#include "port_display.h"
 
 #define TAG "app"
 #define LED_BLINK_BIT 0x80
@@ -40,7 +41,7 @@ static SemaphoreHandle_t temp_read_mutex = NULL;
 
 static bool read_temp_humidity(float *temperature, float *humidity);
 
-static int settingTarget = 0;
+static int setting_target_id = 0;
 
 int overallInfoPageNumber = 1;
 
@@ -55,11 +56,15 @@ static lv_timer_t *temp_timer = NULL;
 static const uint32_t temp_period_list[] = {3000, 20000, 60000, 300000};
 
 static const uint32_t chartPointList[] = {20, 40, 100};
+static const char *temp_sensor_source_list[] = {"SHTC3", "SHT31"};
 static const size_t temp_period_count = sizeof(temp_period_list) / sizeof(temp_period_list[0]);
+static const size_t temp_sensor_source_count = sizeof(temp_sensor_source_list) / sizeof(temp_sensor_source_list[0]);
 static size_t temp_period_selected_index = 0; // default selected 3000ms
 static size_t temp_period_active_index = 0;   // default active 3000ms
 static size_t chartPointsSelectedIndex = 0;   // default selected 10 points
 static size_t chartPointsActiveIndex = 0;     // default active 10 points
+static size_t temp_sensor_source_selected_index = 0; // default selected SHTC3
+static size_t temp_sensor_source_active_index = 0;   // default active SHTC3
 
 static uint32_t temp_sample_count = 0;
 uint16_t TEMP_OFFSET = 20;
@@ -67,7 +72,7 @@ const uint16_t TEMP_SCALER = 3;
 // define the fifo for user data, with a capacity of 100 records
 static liteFifo_t tempDataFifo;
 
-static void update_overall_label(void);
+static void do_overall_update(void);
 void Task_led_loop(void *arg);
 void Task_lvgl_loop(void *arg);
 void InitializeButtons(void); /* button 初始化 */
@@ -97,18 +102,18 @@ static bool read_temp_humidity(float *temperature, float *humidity)
     float t = -1000.0f;
     float h = -1000.0f;
 
-    Shtc3_ReadTempHumi(&t, &h);
-    if (t != -1000.0f && h != -1000.0f)
+    if (temp_sensor_source_active_index == 1)
     {
-        success = true;
+        Sht31_ReadTempHumi(&t, &h);
     }
     else
     {
-        Sht31_ReadTempHumi(&t, &h);
-        if (t != -1000.0f && h != -1000.0f)
-        {
-            success = true;
-        }
+        Shtc3_ReadTempHumi(&t, &h);
+    }
+
+    if (t != -1000.0f && h != -1000.0f)
+    {
+        success = true;
     }
 
     if (success)
@@ -150,7 +155,7 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     {
         min_temp = t;
     }
-    ESP_LOGI(TAG, "Temp%ld: %.1f %.1f", temp_sample_count, t, h);
+    // ESP_LOGI(TAG, "Sample_%ld: %.1f %.1f", temp_sample_count, t, h);
 }
 
 
@@ -221,17 +226,22 @@ static void show_container(int container_number)
         if (container_number == 3) // Setting page
         {
             char buf[80];
-            if (settingTarget == 0)
+            if (setting_target_id == 0)
             {
                 // print current selected sample interval to the label
                 uint32_t selected = temp_period_list[temp_period_selected_index] / 1000;
                 snprintf(buf, sizeof(buf), "Sample Intv Sel:%lu", selected);
                 lv_label_set_text(scr_ui.label_touch_event, buf);
             }
-            else if (settingTarget == 1)
+            else if (setting_target_id == 1)
             {
                 // print current selected chart point count to the label
                 snprintf(buf, sizeof(buf), "Chart Point Sel:%lu", chartPointList[chartPointsSelectedIndex]);
+                lv_label_set_text(scr_ui.label_touch_event, buf);
+            }
+            else if (setting_target_id == 2)
+            {
+                snprintf(buf, sizeof(buf), "Sensor Src Sel:%s", temp_sensor_source_list[temp_sensor_source_selected_index]);
                 lv_label_set_text(scr_ui.label_touch_event, buf);
             }
         }
@@ -252,7 +262,7 @@ static void show_container(int container_number)
 }
 
 
-void update_overall_label(void)
+void do_overall_update(void)
 {
     char buf[140] = "";
     if (overallInfoPageNumber == 1)
@@ -263,6 +273,7 @@ void update_overall_label(void)
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset: %u", TEMP_OFFSET);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp scaler: %u", TEMP_SCALER);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nChart size: %lu", lv_chart_get_point_count(scr_ui.temp_chart));
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSensor Src: %s", temp_sensor_source_list[temp_sensor_source_active_index]);
 
         float t = 0.0f;
         float h = 0.0f;
@@ -292,31 +303,40 @@ void update_overall_label(void)
 static void touch_on_next(void)
 {
     char buf[80] = "default";
-    if (settingTarget == 0)
+    if (setting_target_id == 0)
     {
         temp_period_selected_index = (temp_period_selected_index + 1) % temp_period_count;
         uint32_t selected = temp_period_list[temp_period_selected_index] / 1000;
         snprintf(buf, sizeof(buf), "Sample Intv Sel:%lu", selected);
     }
-    else
+    else if (setting_target_id == 1)
     {
         chartPointsSelectedIndex = (chartPointsSelectedIndex + 1) % (sizeof(chartPointList) / sizeof(chartPointList[0]));
         snprintf(buf, sizeof(buf), "Chart Point Sel:%lu", chartPointList[chartPointsSelectedIndex]);
+    }
+    else
+    {
+        temp_sensor_source_selected_index = (temp_sensor_source_selected_index + 1) % temp_sensor_source_count;
+        snprintf(buf, sizeof(buf), "Sensor Src Sel:%s", temp_sensor_source_list[temp_sensor_source_selected_index]);
     }
     lv_label_set_text(scr_ui.label_touch_event, buf);
 }
 
 static void touch_on_active_button(void)
 {
-    if (settingTarget == 0)
+    if (setting_target_id == 0)
     {
         temp_period_active_index = temp_period_selected_index;
         lv_timer_set_period(temp_timer, temp_period_list[temp_period_active_index]);
     }
-    else
+    else if (setting_target_id == 1)
     {
         chartPointsActiveIndex = chartPointsSelectedIndex;
         lv_chart_set_point_count(scr_ui.temp_chart, chartPointList[chartPointsActiveIndex]);
+    }
+    else
+    {
+        temp_sensor_source_active_index = temp_sensor_source_selected_index;
     }
 
     lv_label_set_text(scr_ui.label_touch_event, "actived");
@@ -325,34 +345,46 @@ static void touch_on_active_button(void)
 static void touch_on_cancel_button(void)
 {
     char buf[80] = "default";
-    if (settingTarget == 0)
+    if (setting_target_id == 0)
     {
         temp_period_selected_index = temp_period_active_index;
         uint32_t selected = temp_period_list[temp_period_selected_index] / 1000;
         snprintf(buf, sizeof(buf), "Sample Intv | Sel:%lu", selected);
-        lv_label_set_text(scr_ui.label_touch_event, buf);
     }
-    else if (settingTarget == 1)
+    else if (setting_target_id == 1)
     {
         chartPointsSelectedIndex = chartPointsActiveIndex;
         snprintf(buf, sizeof(buf), "Chart Point | Sel:%lu", chartPointList[chartPointsSelectedIndex]);
     }
+    else
+    {
+        temp_sensor_source_selected_index = temp_sensor_source_active_index;
+        snprintf(buf, sizeof(buf), "Temp Src | Sel:%s", temp_sensor_source_list[temp_sensor_source_selected_index]);
+    }
     lv_label_set_text(scr_ui.label_touch_event, buf);
+
+    // EPD_Display(); // no effect?
 }
 
 static void touch_on_more_button(void)
 {
-    if (settingTarget == 0)
+    if (setting_target_id == 0)
     {
-        // toggle chart point count between 10 and 30 for testing
-        settingTarget = 1;
+        setting_target_id = 1;
         char buf[80];
         snprintf(buf, sizeof(buf), "Chart Point Mode:%lu", chartPointList[chartPointsSelectedIndex]);
         lv_label_set_text(scr_ui.label_touch_event, buf);
     }
-    else if (settingTarget == 1)
+    else if (setting_target_id == 1)
     {
-        settingTarget = 0;
+        setting_target_id = 2;
+        char buf[80];
+        snprintf(buf, sizeof(buf), "Sensor Src Mode:%s", temp_sensor_source_list[temp_sensor_source_selected_index]);
+        lv_label_set_text(scr_ui.label_touch_event, buf);
+    }
+    else
+    {
+        setting_target_id = 0;
         char buf[80];
         uint32_t selected = temp_period_list[temp_period_selected_index] / 1000;
         snprintf(buf, sizeof(buf), "Sample Intv Mode:%lu", selected);
@@ -376,7 +408,7 @@ void UserApp_Start_Init()
     xTaskCreatePinnedToCore(Task_led_loop, "Task_led_loop", 4 * 1024, NULL, 4, NULL, 1);
     xTaskCreatePinnedToCore(Task_lvgl_loop, "Task_lvgl_loop", 5 * 1024, NULL, 2, NULL, 1);
     xTaskCreatePinnedToCore(Task_key_loop, "Task_key_loop", 4 * 1024, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(Task_touch_loop, "Touch_LoppTask", 4 * 1024, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(Task_touch_loop, "Task_touch_loop", 4 * 1024, NULL, 2, NULL, 1);
 }
 
 void Task_led_loop(void *arg)
@@ -445,7 +477,7 @@ uint16_t get_float_pos_y(float temp)
     if (y > y_max)
         y = y_max;
 
-    ESP_LOGI(TAG, "Temp: %.1f rel: %.3f mapped to Y: %d (top:%d bottom:%d height:%d)", temp, rel, y, chart_top, chart_bottom, chart_height);
+    // ESP_LOGI(TAG, "Temp: %.1f rel: %.3f mapped to Y: %d (top:%d bottom:%d height:%d)", temp, rel, y, chart_top, chart_bottom, chart_height);
 
     return (uint16_t)y;
 }
@@ -542,6 +574,39 @@ void do_temp_chart_update(void)
     }
 }
 
+// called in lvgl loop task, no lock needed
+void do_temp_list_update(void)
+{
+    // copy all temperature records to temp_record buffer and update the detail label text according to tempDetailPageNumber
+    user_data_t temp_record[MAX_TEMP_FIFO_SIZE];
+    fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
+
+    char buf[256] = "";
+    char record_buf[64];
+    if (tempDetailPageNumber >= MAX_TEMP_DETAIL_TOTAL_PAGE)
+    {
+        snprintf(record_buf, sizeof(record_buf), "\nMax: %0.1f°C\n", max_temp);
+        strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
+        snprintf(record_buf, sizeof(record_buf), "Min: %0.1f°C\n", min_temp);
+        strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
+        tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE;
+    }
+    else
+    {
+        int beginIndex = tempDetailPageNumber * 10;
+        snprintf(record_buf, sizeof(record_buf), "Page:%d from:%d\n\n", tempDetailPageNumber, beginIndex);
+        strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
+        for (int i = 0; i < 10; ++i)
+        {
+            user_data_t record = temp_record[beginIndex + (10-1) - i];
+            snprintf(record_buf, sizeof(record_buf), "%02d  %02d:%02d:%02d>%.1f°C\n", i + 1, record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
+            strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
+        }
+    }
+    // ESP_LOGI(TAG, "tempDetailPageNumber: %d", tempDetailPageNumber);
+    // ESP_LOGI(TAG, "size of detail: %d, content: \n%s", strlen(buf), buf); // full list 10 record: 226 size
+    lv_label_set_text(scr_ui.label_temp_list, buf);
+}
 
 void Task_lvgl_loop(void *arg)
 {
@@ -586,9 +651,14 @@ void Task_lvgl_loop(void *arg)
         if (!lv_obj_has_flag(scr_ui.container_temp_chart, LV_OBJ_FLAG_HIDDEN))
         {
             do_temp_chart_update();
+            do_temp_list_update();
         }
 
-        update_overall_label();
+        // update home page overall information
+        if (!lv_obj_has_flag(scr_ui.container_home, LV_OBJ_FLAG_HIDDEN))
+        {
+            do_overall_update();
+        }
 
         Lvgl_unlock();
     }
@@ -654,7 +724,6 @@ void ButtonEvent_BootKeyClick(void)
         overallInfoPageNumber %= 2;
     }
 
-    // for container 4
     if (!lv_obj_has_flag(scr_ui.container_temp_chart, LV_OBJ_FLAG_HIDDEN))
     {
         // hide chart and static label
@@ -672,41 +741,6 @@ void ButtonEvent_BootKeyClick(void)
             // remove detail hidden flag to show the detail label
             if (scr_ui.label_temp_list)
                 lv_obj_remove_flag(scr_ui.label_temp_list, LV_OBJ_FLAG_HIDDEN);
-            Lvgl_unlock();
-        }
-
-        // copy all temperature records to temp_record buffer and update the detail label text according to tempDetailPageNumber
-        user_data_t temp_record[MAX_TEMP_FIFO_SIZE];
-        fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
-
-        char buf[256] = "";
-        char record_buf[64];
-        if (tempDetailPageNumber >= MAX_TEMP_DETAIL_TOTAL_PAGE)
-        {
-            snprintf(record_buf, sizeof(record_buf), "\nMax: %0.1f°C\n", max_temp);
-            strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
-            snprintf(record_buf, sizeof(record_buf), "Min: %0.1f°C\n", min_temp);
-            strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
-            tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE;
-        }
-        else
-        {
-            int beginIndex = tempDetailPageNumber * 10;
-            snprintf(record_buf, sizeof(record_buf), "Page:%d from:%d\n\n", tempDetailPageNumber, beginIndex);
-            strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
-            for (int i = 0; i < 10; ++i)
-            {
-                user_data_t record = temp_record[beginIndex + i];
-                snprintf(record_buf, sizeof(record_buf), "%02d  %02d:%02d:%02d>%.1f°C\n", i+1, record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
-                strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
-            }
-        }
-
-        ESP_LOGI(TAG, "tempDetailPageNumber: %d", tempDetailPageNumber);
-        ESP_LOGI(TAG, "size of detail: %d, content: \n%s", strlen(buf), buf);
-        if (Lvgl_lock(portMAX_DELAY))
-        {
-            lv_label_set_text(scr_ui.label_temp_list, buf);
             Lvgl_unlock();
         }
 

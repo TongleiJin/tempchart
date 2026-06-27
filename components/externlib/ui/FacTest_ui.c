@@ -103,7 +103,7 @@ void setup_scr_screen(lv_factest_ui *ui)
     
     ui->label_home_main_info = lv_label_create(ui->container_home);
     lv_obj_set_pos(ui->label_home_main_info, 6, 35);
-    lv_obj_set_size(ui->label_home_main_info, 180, 140);
+    lv_obj_set_size(ui->label_home_main_info, 180, 160);
     lv_label_set_long_mode(ui->label_home_main_info, LV_LABEL_LONG_WRAP);
     lv_label_set_text(ui->label_home_main_info, "Updating...");
 
