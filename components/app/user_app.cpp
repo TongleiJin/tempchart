@@ -252,19 +252,11 @@ static void ShowOnlyContainer(int container_number)
 
         Lvgl_unlock();
     }
-    if (container_number == 2)
-    {
-        UpdateOverallInfoLabel();
-    }
 }
 
 
 void UpdateOverallInfoLabel(void)
 {
-    if (!scr_ui.label_homeMain)
-    {
-        return;
-    }
     char buf[140] = "";
     if (overallInfoPageNumber == 1)
     {
@@ -297,11 +289,7 @@ void UpdateOverallInfoLabel(void)
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPOWER DOUBLE: show chart");
     }
 
-    if (Lvgl_lock(portMAX_DELAY))
-    {
-        lv_label_set_text(scr_ui.label_homeMain, buf);
-        Lvgl_unlock();
-    }
+    lv_label_set_text(scr_ui.label_homeMain, buf);
 }
 
 static void TouchContainer_NextPeriod(void)
@@ -604,6 +592,8 @@ void Lvgl_LoopTask(void *arg)
             DoUpdateTempChart();
         }
 
+        UpdateOverallInfoLabel();
+
         Lvgl_unlock();
     }
 }
@@ -664,10 +654,8 @@ void ButtonEvent_BootKeyClick(void)
     // if being container 1 showing, then update the label text, otherwise do nothing.
     if (!lv_obj_has_flag(scr_ui.container_home, LV_OBJ_FLAG_HIDDEN))
     {
-
         overallInfoPageNumber++;
         overallInfoPageNumber %= 2;
-        UpdateOverallInfoLabel();
     }
 
     // for container 4
