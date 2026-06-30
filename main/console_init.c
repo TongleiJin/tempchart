@@ -1,9 +1,12 @@
 #include "console_init.h"
 
 #include "esp_console.h"
+#include "esp_event.h"
 #include "esp_log.h"
+#include "esp_netif.h"
 #include "nvs_flash.h"
 
+#include "ble_app.h"
 #include "cmd_system.h"
 #include "cmd_nvs.h"
 #include "cmd_board.h"
@@ -36,6 +39,9 @@ void Console_Init(void)
     repl_config.max_cmdline_length = CONFIG_CONSOLE_MAX_COMMAND_LINE_LENGTH;
 
     initialize_nvs();
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(ble_app_init());
 
     esp_console_register_help_command();
     register_system_common();

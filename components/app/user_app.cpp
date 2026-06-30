@@ -527,7 +527,7 @@ void do_temp_chart_update(void)
 
     fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
     int point_count = (int)lv_chart_get_point_count(scr_ui.temp_chart);
-    ESP_LOGI(TAG, "Updating chart with %d points", point_count);
+    // ESP_LOGI(TAG, "Updating chart with %d points", point_count);
     totalValue = 0;
     for (int i = MAX_TEMP_FIFO_SIZE - point_count; i < MAX_TEMP_FIFO_SIZE; ++i)
     {
@@ -536,11 +536,11 @@ void do_temp_chart_update(void)
         temp = (temp - TEMP_OFFSET) * TEMP_SCALER;
         lv_chart_set_next_value(scr_ui.temp_chart, scr_ui.temp_series, temp);
     }
-    ESP_LOGI(TAG, "Total temp value: %.1f", totalValue);
+    // ESP_LOGI(TAG, "Total temp value: %.1f", totalValue);
 
     totalValue = totalValue / point_count + 0.5;
     TEMP_OFFSET = (uint16_t)((totalValue * 0.8) * 0.2 + TEMP_OFFSET * 0.8);
-    ESP_LOGI(TAG, "Updated TEMP_OFFSET: %u", TEMP_OFFSET);
+    // ESP_LOGI(TAG, "Updated TEMP_OFFSET: %u", TEMP_OFFSET);
 
     lv_obj_invalidate(scr_ui.temp_chart);
     char buf[128] = "";

@@ -6,4 +6,10 @@ menu "App Configuration"
         help
             Maximum length of a single console command line.
 
+    config APP_BLE_DEVICE_NAME
+        string "BLE device name"
+        default "TempChart-S3"
+        help
+            GAP device name advertised over BLE (NimBLE bleprph style).
+
 endmenu
