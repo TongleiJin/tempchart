@@ -126,6 +126,10 @@ static bool read_temp_humidity(float *temperature, float *humidity)
     return success;
 }
 
+bool UserApp_ReadTempHumidity(float *temperature, float *humidity)
+{
+    return read_temp_humidity(temperature, humidity);
+}
 
 
 static void temp_update_timer_cb(lv_timer_t *timer)

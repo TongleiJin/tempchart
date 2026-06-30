@@ -1,0 +1,9 @@
+menu "App Configuration"
+
+    config CONSOLE_MAX_COMMAND_LINE_LENGTH
+        int "Maximum command line length"
+        default 1024
+        help
+            Maximum length of a single console command line.
+
+endmenu

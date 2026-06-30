@@ -8,6 +8,7 @@
 #include "port_display.h"
 #include "port_lvgl.h"
 #include "user_app.h"
+#include "console_init.h"
 
 static void Lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *color_p)
 {
@@ -70,4 +71,5 @@ extern "C" void app_main(void)
 	Lvgl_PortInit(Lvgl_flush_cb);
 	UserUi_Init();
 	UserApp_Start_Init();
+	Console_Init();
 }
