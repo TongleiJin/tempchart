@@ -1,9 +1,12 @@
+idf_build_get_property(project_dir PROJECT_DIR)
+
 idf_component_register(
     SRCS
         "main.cpp"
         "console_init.c"
         "console/cmd_board.c"
         "console/cmd_sensor.c"
+        "console/cmd_ota.c"
         "ble/ble_app.c"
         "ble/gatt_svr.c"
     INCLUDE_DIRS
@@ -12,5 +15,6 @@ idf_component_register(
         "ble"
     PRIV_REQUIRES
         app port_bsp console nvs_flash app_update esp_timer lvgl driver esp_adc
-        bt esp_netif esp_event
+        bt esp_netif esp_event esp_http_client esp_wifi
+    EMBED_TXTFILES ${project_dir}/server_certs/ca_cert.pem
 )

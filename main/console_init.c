@@ -8,9 +8,11 @@
 
 #include "ble_app.h"
 #include "cmd_system.h"
+#include "cmd_wifi.h"
 #include "cmd_nvs.h"
 #include "cmd_board.h"
 #include "cmd_sensor.h"
+#include "cmd_ota.h"
 
 static const char *TAG = "console";
 #define PROMPT_STR "tempchart"
@@ -52,8 +54,12 @@ void Console_Init(void)
     register_system_deep_sleep();
 #endif
     register_nvs();
+#if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
+    register_wifi();
+#endif
     register_cmd_board();
     register_cmd_sensor();
+    register_cmd_ota();
 
 #if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
     esp_console_dev_usb_serial_jtag_config_t hw_config =

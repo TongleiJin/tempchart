@@ -12,4 +12,17 @@ menu "App Configuration"
         help
             GAP device name advertised over BLE (NimBLE bleprph style).
 
+    config APP_OTA_FIRMWARE_URL
+        string "OTA firmware HTTPS URL"
+        default "https://192.168.1.100:8070/11_Fac.bin"
+        help
+            URL of the firmware binary on your OTA server.
+            Use the same CA cert as server_certs/ca_cert.pem for HTTPS.
+
+    config APP_OTA_RECV_TIMEOUT
+        int "OTA receive timeout (ms)"
+        default 10000
+        help
+            HTTP receive timeout for OTA download.
+
 endmenu
