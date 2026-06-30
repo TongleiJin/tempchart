@@ -1,26 +1,33 @@
 /*
- * GATT server (from ESP-IDF nimble/bleprph example, simplified)
+ * TempChart GATT server: temperature, humidity (read), data RX (write).
  */
-#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
-#include "services/ans/ble_svc_ans.h"
 #include "gatt_svr.h"
 #include "modlog/modlog.h"
+#include "user_app.h"
 
-static uint8_t gatt_svr_chr_val;
-static uint16_t gatt_svr_chr_val_handle;
-static const ble_uuid128_t gatt_svr_svc_uuid =
-    BLE_UUID128_INIT(0x2d, 0x71, 0xa2, 0x59, 0xb4, 0x58, 0xc8, 0x12,
-                     0x99, 0x99, 0x43, 0x95, 0x12, 0x2f, 0x46, 0x59);
-static const ble_uuid128_t gatt_svr_chr_uuid =
-    BLE_UUID128_INIT(0x00, 0x00, 0x00, 0x00, 0x11, 0x11, 0x11, 0x11,
-                     0x22, 0x22, 0x22, 0x22, 0x33, 0x33, 0x33, 0x33);
+static const char *TAG = "gatt_svr";
+
+static uint16_t gatt_svr_temp_handle;
+static uint16_t gatt_svr_hum_handle;
+static uint16_t gatt_svr_rx_handle;
+static uint16_t gatt_svr_tick_handle;
+static bool s_tick_notify_enabled;
+
+static const ble_uuid16_t gatt_svr_svc_uuid = BLE_UUID16_INIT(GATT_SVR_SVC_UUID16);
+static const ble_uuid16_t gatt_svr_temp_uuid = BLE_UUID16_INIT(GATT_SVR_CHR_TEMP_UUID16);
+static const ble_uuid16_t gatt_svr_hum_uuid = BLE_UUID16_INIT(GATT_SVR_CHR_HUM_UUID16);
+static const ble_uuid16_t gatt_svr_rx_uuid = BLE_UUID16_INIT(GATT_SVR_CHR_RX_UUID16);
+static const ble_uuid16_t gatt_svr_tick_uuid = BLE_UUID16_INIT(GATT_SVR_CHR_TICK_UUID16);
 
 static int gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
                            struct ble_gatt_access_ctxt *ctxt, void *arg);
@@ -31,11 +38,28 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         .uuid = &gatt_svr_svc_uuid.u,
         .characteristics = (struct ble_gatt_chr_def[]) {
             {
-                .uuid = &gatt_svr_chr_uuid.u,
+                .uuid = &gatt_svr_temp_uuid.u,
                 .access_cb = gatt_svc_access,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE |
-                         BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_INDICATE,
-                .val_handle = &gatt_svr_chr_val_handle,
+                .flags = BLE_GATT_CHR_F_READ,
+                .val_handle = &gatt_svr_temp_handle,
+            },
+            {
+                .uuid = &gatt_svr_hum_uuid.u,
+                .access_cb = gatt_svc_access,
+                .flags = BLE_GATT_CHR_F_READ,
+                .val_handle = &gatt_svr_hum_handle,
+            },
+            {
+                .uuid = &gatt_svr_rx_uuid.u,
+                .access_cb = gatt_svc_access,
+                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+                .val_handle = &gatt_svr_rx_handle,
+            },
+            {
+                .uuid = &gatt_svr_tick_uuid.u,
+                .access_cb = gatt_svc_access,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
+                .val_handle = &gatt_svr_tick_handle,
             },
             { 0 },
         },
@@ -43,35 +67,196 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
     { 0 },
 };
 
-static int gatt_svr_write(struct os_mbuf *om, uint16_t min_len, uint16_t max_len,
-                          void *dst, uint16_t *len)
+static void gatt_svr_log_rx_hex(const uint8_t *data, uint16_t len)
 {
-    uint16_t om_len = OS_MBUF_PKTLEN(om);
-    if (om_len < min_len || om_len > max_len) {
-        return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+    if (len == 0) {
+        return;
     }
-    return ble_hs_mbuf_to_flat(om, dst, max_len, len);
+
+    if (len <= 32) {
+        char hex[32 * 3 + 1];
+        size_t pos = 0;
+
+        for (uint16_t i = 0; i < len && pos + 3 < sizeof(hex); i++) {
+            pos += snprintf(hex + pos, sizeof(hex) - pos, "%02x ", data[i]);
+        }
+        if (pos > 0) {
+            hex[pos - 1] = '\0';
+        } else {
+            hex[0] = '\0';
+        }
+        ESP_LOGI(TAG, "RX (%u bytes): %s", len, hex);
+        return;
+    }
+
+    ESP_LOGI(TAG, "RX %u bytes:", len);
+    for (uint16_t off = 0; off < len; off += 16) {
+        char hex[16 * 3 + 1];
+        uint16_t chunk = len - off;
+
+        if (chunk > 16) {
+            chunk = 16;
+        }
+
+        size_t pos = 0;
+        for (uint16_t i = 0; i < chunk; i++) {
+            pos += snprintf(hex + pos, sizeof(hex) - pos, "%02x ", data[off + i]);
+        }
+        if (pos > 0) {
+            hex[pos - 1] = '\0';
+        } else {
+            hex[0] = '\0';
+        }
+        ESP_LOGI(TAG, "  %04x: %s", off, hex);
+    }
+}
+
+static int gatt_svr_read_float(uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt,
+                                 float *value_out)
+{
+    float temperature = 0.0f;
+    float humidity = 0.0f;
+    float value;
+    int rc;
+
+    if (!UserApp_ReadTempHumidity(&temperature, &humidity)) {
+        ESP_LOGW(TAG, "sensor read failed");
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    if (attr_handle == gatt_svr_temp_handle) {
+        value = temperature;
+    } else if (attr_handle == gatt_svr_hum_handle) {
+        value = humidity;
+    } else {
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    rc = os_mbuf_append(ctxt->om, &value, sizeof(value));
+    if (rc != 0) {
+        return BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
+
+    if (value_out != NULL) {
+        *value_out = value;
+    }
+    return 0;
+}
+
+static int gatt_svr_format_tick_msg(char *buf, size_t buf_len)
+{
+    char time_str[16];
+    TickType_t tick = xTaskGetTickCount();
+
+    UserApp_GetTimeStr(time_str, sizeof(time_str));
+    return snprintf(buf, buf_len, "tick=%lu,time=%s,kimjin",
+                    (unsigned long)tick, time_str);
+}
+
+static int gatt_svr_read_tick(struct ble_gatt_access_ctxt *ctxt)
+{
+    char buf[GATT_SVR_TICK_MSG_MAX_LEN];
+    int len = gatt_svr_format_tick_msg(buf, sizeof(buf));
+    int rc;
+
+    if (len <= 0 || len >= (int)sizeof(buf)) {
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    rc = os_mbuf_append(ctxt->om, buf, len);
+    if (rc != 0) {
+        return BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
+
+    ESP_LOGD(TAG, "READ tick: %s", buf);
+    return 0;
+}
+
+uint16_t gatt_svr_tick_chr_val_handle(void)
+{
+    return gatt_svr_tick_handle;
+}
+
+void gatt_svr_tick_notify_set(bool enabled)
+{
+    s_tick_notify_enabled = enabled;
+}
+
+bool gatt_svr_tick_notify_enabled(void)
+{
+    return s_tick_notify_enabled;
+}
+
+int gatt_svr_notify_tick(uint16_t conn_handle)
+{
+    char buf[GATT_SVR_TICK_MSG_MAX_LEN];
+    int len = gatt_svr_format_tick_msg(buf, sizeof(buf));
+    struct os_mbuf *om;
+    int rc;
+
+    if (len <= 0 || len >= (int)sizeof(buf)) {
+        return BLE_HS_EINVAL;
+    }
+
+    om = ble_hs_mbuf_from_flat(buf, len);
+    if (om == NULL) {
+        return BLE_HS_ENOMEM;
+    }
+
+    rc = ble_gatts_notify_custom(conn_handle, gatt_svr_tick_handle, om);
+    if (rc != 0) {
+        os_mbuf_free_chain(om);
+        ESP_LOGW(TAG, "tick notify failed: %d", rc);
+        return rc;
+    }
+
+    ESP_LOGI(TAG, "NOTIFY tick: %s", buf);
+    return 0;
 }
 
 static int gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
                            struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
+    float value;
     int rc;
+
+    (void)conn_handle;
+    (void)arg;
 
     switch (ctxt->op) {
     case BLE_GATT_ACCESS_OP_READ_CHR:
-        if (attr_handle == gatt_svr_chr_val_handle) {
-            rc = os_mbuf_append(ctxt->om, &gatt_svr_chr_val, sizeof(gatt_svr_chr_val));
-            return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+        if (attr_handle == gatt_svr_tick_handle) {
+            return gatt_svr_read_tick(ctxt);
+        }
+        if (attr_handle == gatt_svr_temp_handle || attr_handle == gatt_svr_hum_handle) {
+            rc = gatt_svr_read_float(attr_handle, ctxt, &value);
+            if (rc == 0) {
+                ESP_LOGD(TAG, "READ %s = %.2f",
+                         attr_handle == gatt_svr_temp_handle ? "temp" : "hum",
+                         value);
+            }
+            return rc;
         }
         break;
 
     case BLE_GATT_ACCESS_OP_WRITE_CHR:
-        if (attr_handle == gatt_svr_chr_val_handle) {
-            rc = gatt_svr_write(ctxt->om, sizeof(gatt_svr_chr_val),
-                                sizeof(gatt_svr_chr_val), &gatt_svr_chr_val, NULL);
-            ble_gatts_chr_updated(attr_handle);
-            return rc;
+        if (attr_handle == gatt_svr_rx_handle) {
+            uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
+
+            if (len == 0 || len > GATT_SVR_RX_MAX_LEN) {
+                ESP_LOGW(TAG, "RX invalid length: %u", len);
+                return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+            }
+
+            uint8_t buf[GATT_SVR_RX_MAX_LEN];
+            rc = ble_hs_mbuf_to_flat(ctxt->om, buf, len, NULL);
+            if (rc != 0) {
+                ESP_LOGE(TAG, "RX mbuf flatten failed: %d", rc);
+                return BLE_ATT_ERR_UNLIKELY;
+            }
+
+            gatt_svr_log_rx_hex(buf, len);
+            return 0;
         }
         break;
 
@@ -105,7 +290,6 @@ int gatt_svr_init(void)
 {
     ble_svc_gap_init();
     ble_svc_gatt_init();
-    ble_svc_ans_init();
 
     int rc = ble_gatts_count_cfg(gatt_svr_svcs);
     if (rc != 0) {

@@ -131,6 +131,23 @@ bool UserApp_ReadTempHumidity(float *temperature, float *humidity)
     return read_temp_humidity(temperature, humidity);
 }
 
+void UserApp_GetTimeStr(char *buf, size_t len)
+{
+    if (!buf || len == 0) {
+        return;
+    }
+
+    if (pcf85063initflag) {
+        pcf85063a_datetime_t current_time = {};
+        pcf85063a_get_time_date(&pcf85063, &current_time);
+        snprintf(buf, len, "%02d:%02d:%02d",
+                 current_time.hour, current_time.min, current_time.sec);
+        return;
+    }
+
+    snprintf(buf, len, "--:--:--");
+}
+
 
 static void temp_update_timer_cb(lv_timer_t *timer)
 {

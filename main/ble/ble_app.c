@@ -6,6 +6,8 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "host/ble_hs.h"
 #include "host/util/util.h"
 #include "nimble/nimble_port.h"
@@ -15,6 +17,10 @@
 
 static const char *TAG = "ble_app";
 static uint8_t own_addr_type;
+static uint16_t s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+static TaskHandle_t s_tick_notify_task;
+
+#define BLE_TICK_NOTIFY_INTERVAL_MS 1000
 
 static void print_addr(const uint8_t *addr)
 {
@@ -26,6 +32,26 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg);
 static void ble_on_sync(void);
 static void ble_on_reset(int reason);
 static void ble_advertise(void);
+static void ble_tick_notify_task(void *param);
+
+static void ble_tick_notify_task(void *param)
+{
+    (void)param;
+
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(BLE_TICK_NOTIFY_INTERVAL_MS));
+
+        if (s_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+            continue;
+        }
+
+        if (!gatt_svr_tick_notify_enabled()) {
+            continue;
+        }
+
+        gatt_svr_notify_tick(s_conn_handle);
+    }
+}
 
 void ble_store_config_init(void);
 
@@ -47,7 +73,7 @@ static void ble_advertise(void)
     fields.name_is_complete = 1;
 
     fields.uuids16 = (ble_uuid16_t[]) {
-        BLE_UUID16_INIT(GATT_SVR_SVC_ALERT_UUID)
+        BLE_UUID16_INIT(GATT_SVR_SVC_UUID16)
     };
     fields.num_uuids16 = 1;
     fields.uuids16_is_complete = 1;
@@ -78,14 +104,26 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "connection %s; status=%d",
                  event->connect.status == 0 ? "established" : "failed",
                  event->connect.status);
-        if (event->connect.status != 0) {
+        if (event->connect.status == 0) {
+            s_conn_handle = event->connect.conn_handle;
+        } else {
             ble_advertise();
         }
         return 0;
 
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI(TAG, "disconnect; reason=%d", event->disconnect.reason);
+        s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+        gatt_svr_tick_notify_set(false);
         ble_advertise();
+        return 0;
+
+    case BLE_GAP_EVENT_SUBSCRIBE:
+        if (event->subscribe.attr_handle == gatt_svr_tick_chr_val_handle()) {
+            gatt_svr_tick_notify_set(event->subscribe.cur_notify);
+            ESP_LOGI(TAG, "tick notify %s",
+                     event->subscribe.cur_notify ? "enabled" : "disabled");
+        }
         return 0;
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
@@ -155,6 +193,11 @@ esp_err_t ble_app_init(void)
 
     ble_store_config_init();
     nimble_port_freertos_init(ble_host_task);
+
+    if (s_tick_notify_task == NULL) {
+        xTaskCreate(ble_tick_notify_task, "ble_tick_notify", 3072, NULL, 5,
+                    &s_tick_notify_task);
+    }
 
     ESP_LOGI(TAG, "NimBLE peripheral ready, name=%s", CONFIG_APP_BLE_DEVICE_NAME);
     return ESP_OK;
