@@ -10,6 +10,7 @@ idf_component_register(
     "port_shtc3.cpp"
     "port_sht31.cpp"
     "port_codec.cpp"
+    "port_rtc.cpp"
     PRIV_REQUIRES
     driver
     esp_adc
@@ -20,7 +21,8 @@ idf_component_register(
     codec_board
     espressif__esp_codec_dev
     REQUIRES
-    driver        
+    driver
+    waveshare__pcf85063a
     INCLUDE_DIRS
     "./"
     EMBED_FILES "canon.pcm"

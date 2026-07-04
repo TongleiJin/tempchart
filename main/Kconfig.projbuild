@@ -25,4 +25,23 @@ menu "App Configuration"
         help
             HTTP receive timeout for OTA download.
 
+    config APP_NTP_SERVER
+        string "NTP server hostname"
+        default "ntp.aliyun.com"
+        help
+            SNTP server used by the ntp sync console command.
+
+    config APP_NTP_TIMEZONE
+        string "Timezone (TZ format)"
+        default "CST-8"
+        help
+            POSIX TZ string applied before converting network time to local time.
+            Example for China: CST-8
+
+    config APP_NTP_SYNC_TIMEOUT
+        int "NTP sync timeout (ms)"
+        default 10000
+        help
+            Maximum wait time for SNTP synchronization.
+
 endmenu
