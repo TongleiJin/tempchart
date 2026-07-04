@@ -17,7 +17,7 @@ import socketserver
 import ssl
 import sys
 
-FIRMWARE_NAME = "smart_tempchart.bin"
+FIRMWARE_NAME = "tempchart.bin"
 
 # Same cert/key pair as ESP-IDF examples/system/ota/simple_ota_example/pytest_simple_ota.py
 SERVER_CERT = """-----BEGIN CERTIFICATE-----

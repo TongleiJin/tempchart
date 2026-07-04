@@ -26,12 +26,13 @@
 #include "port_lvgl.h"
 #include "user_app.h"
 #include "ble_app.h"
+#include "board_config.h"
 
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
 static const char *TAG = "cmd_ota";
-#define OTA_BUF_SIZE 4096
+#define OTA_BUF_SIZE BOARD_OTA_BUF_SIZE
 
 static bool s_ota_running;
 
