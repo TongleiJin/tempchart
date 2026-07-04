@@ -33,7 +33,7 @@ menu "App Configuration"
 
     config APP_OTA_RECV_TIMEOUT
         int "OTA receive timeout (ms)"
-        default 10000
+        default 120000
         help
             HTTP receive timeout for OTA download.
 

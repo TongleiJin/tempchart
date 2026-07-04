@@ -15,6 +15,7 @@
 #include "cmd_ota.h"
 #include "cmd_ping.h"
 #include "cmd_ntp.h"
+#include "cmd_version.h"
 
 static const char *TAG = "console";
 #define PROMPT_STR "tempchart"
@@ -51,6 +52,7 @@ void Console_Init(void)
     ESP_ERROR_CHECK(ble_app_init());
 
     esp_console_register_help_command();
+    register_cmd_version();
     register_system_common();
 #if SOC_LIGHT_SLEEP_SUPPORTED
     register_system_light_sleep();

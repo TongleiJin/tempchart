@@ -12,6 +12,7 @@
 #include "esp_app_format.h"
 #include "esp_console.h"
 #include "esp_event.h"
+#include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -19,16 +20,111 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "lwip/netdb.h"
+#include "lwip/sockets.h"
 #include "ota_url_store.h"
+#include "port_lvgl.h"
 
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
 static const char *TAG = "cmd_ota";
-#define OTA_BUF_SIZE 1024
+#define OTA_BUF_SIZE 4096
 
-static char s_ota_buf[OTA_BUF_SIZE + 1];
 static bool s_ota_running;
+
+static void ota_log_heap(const char *label)
+{
+    printf("%s: internal free=%u, largest=%u; psram free=%u\n",
+           label,
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+}
+
+static bool ota_parse_host_port(const char *url, char *host, size_t host_len, int *port)
+{
+    const char *p = url;
+    if (strncmp(p, "https://", 8) == 0) {
+        p += 8;
+    } else if (strncmp(p, "http://", 7) == 0) {
+        p += 7;
+    }
+
+    const char *slash = strchr(p, '/');
+    const char *colon = strchr(p, ':');
+    size_t len;
+
+    if (colon != NULL && (slash == NULL || colon < slash)) {
+        len = (size_t)(colon - p);
+        if (len == 0 || len >= host_len) {
+            return false;
+        }
+        memcpy(host, p, len);
+        host[len] = '\0';
+        *port = atoi(colon + 1);
+    } else {
+        len = slash ? (size_t)(slash - p) : strlen(p);
+        if (len == 0 || len >= host_len) {
+            return false;
+        }
+        memcpy(host, p, len);
+        host[len] = '\0';
+        *port = 443;
+    }
+    return *port > 0;
+}
+
+static bool ota_tcp_probe(const char *url)
+{
+    char host[64];
+    int port = 0;
+    if (!ota_parse_host_port(url, host, sizeof(host), &port)) {
+        printf("OTA URL parse failed\n");
+        return false;
+    }
+
+    struct addrinfo hints = {};
+    struct addrinfo *res = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    char port_str[8];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+    if (getaddrinfo(host, port_str, &hints, &res) != 0 || res == NULL) {
+        printf("TCP probe: cannot resolve %s\n", host);
+        return false;
+    }
+
+    int sock = socket(res->ai_family, res->ai_socktype, 0);
+    if (sock < 0) {
+        freeaddrinfo(res);
+        printf("TCP probe: socket create failed\n");
+        return false;
+    }
+
+    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+    int ret = connect(sock, res->ai_addr, res->ai_addrlen);
+    close(sock);
+    freeaddrinfo(res);
+
+    if (ret != 0) {
+        printf("TCP probe failed: cannot reach %s:%d\n", host, port);
+        printf("Check: PC server running, same Wi-Fi, firewall port %d, AP isolation\n", port);
+        return false;
+    }
+
+    printf("TCP probe OK: %s:%d reachable\n", host, port);
+    return true;
+}
+
+static void ota_prepare_network(void)
+{
+    esp_wifi_set_ps(WIFI_PS_NONE);
+}
 
 static void ota_http_cleanup(esp_http_client_handle_t client)
 {
@@ -39,16 +135,27 @@ static void ota_http_cleanup(esp_http_client_handle_t client)
 static void ota_task(void *param)
 {
     char *url = (char *)param;
+    char *ota_buf = heap_caps_malloc(OTA_BUF_SIZE + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     esp_err_t err;
     esp_ota_handle_t update_handle = 0;
     const esp_partition_t *update_partition = NULL;
     const esp_partition_t *running = esp_ota_get_running_partition();
 
+    if (ota_buf == NULL) {
+        ESP_LOGE(TAG, "OTA buffer alloc failed");
+        goto done;
+    }
+
+    ota_log_heap("OTA start");
+    ota_prepare_network();
+
     esp_http_client_config_t config = {
         .url = url,
         .cert_pem = (char *)server_cert_pem_start,
         .timeout_ms = CONFIG_APP_OTA_RECV_TIMEOUT,
-        .keep_alive_enable = true,
+        .buffer_size = OTA_BUF_SIZE,
+        .keep_alive_enable = false,
+        .skip_cert_common_name_check = true,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -78,9 +185,9 @@ static void ota_task(void *param)
     bool image_header_checked = false;
 
     while (1) {
-        int data_read = esp_http_client_read(client, s_ota_buf, OTA_BUF_SIZE);
+        int data_read = esp_http_client_read(client, ota_buf, OTA_BUF_SIZE);
         if (data_read < 0) {
-            ESP_LOGE(TAG, "SSL read error");
+            ESP_LOGE(TAG, "SSL read error, errno=%d", errno);
             ota_http_cleanup(client);
             esp_ota_abort(update_handle);
             goto done;
@@ -91,7 +198,7 @@ static void ota_task(void *param)
                 if (data_read > (int)(sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) +
                                       sizeof(esp_app_desc_t))) {
                     memcpy(&new_app_info,
-                           &s_ota_buf[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)],
+                           &ota_buf[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)],
                            sizeof(esp_app_desc_t));
                     ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
 
@@ -114,7 +221,7 @@ static void ota_task(void *param)
                 }
             }
 
-            err = esp_ota_write(update_handle, s_ota_buf, data_read);
+            err = esp_ota_write(update_handle, ota_buf, data_read);
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
                 ota_http_cleanup(client);
@@ -122,7 +229,10 @@ static void ota_task(void *param)
                 goto done;
             }
             binary_file_length += data_read;
-        } else {
+            if ((binary_file_length % (256 * 1024)) < OTA_BUF_SIZE) {
+                ESP_LOGI(TAG, "Downloaded %d bytes...", binary_file_length);
+            }
+        } else if (data_read == 0) {
             if (errno == ECONNRESET || errno == ENOTCONN) {
                 break;
             }
@@ -160,6 +270,8 @@ static void ota_task(void *param)
     esp_restart();
 
 done:
+    Lvgl_ResumeRefresh();
+    heap_caps_free(ota_buf);
     free(url);
     s_ota_running = false;
     vTaskDelete(NULL);
@@ -194,8 +306,17 @@ static int cmd_ota_start(int argc, char **argv)
     }
 
     printf("Starting OTA from: %s\n", url_copy);
+    printf("Pausing UI refresh for OTA...\n");
+    Lvgl_PauseRefresh();
+    ota_prepare_network();
+    if (!ota_tcp_probe(url_copy)) {
+        Lvgl_ResumeRefresh();
+        free(url_copy);
+        return 1;
+    }
     s_ota_running = true;
-    if (xTaskCreate(ota_task, "ota_task", 8192, url_copy, 5, NULL) != pdPASS) {
+    if (xTaskCreate(ota_task, "ota_task", 12288, url_copy, 5, NULL) != pdPASS) {
+        Lvgl_ResumeRefresh();
         free(url_copy);
         s_ota_running = false;
         printf("Failed to create OTA task\n");

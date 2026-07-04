@@ -11,6 +11,7 @@ idf_component_register(
         "console/cmd_ping.c"
         "console/cmd_ntp.c"
         "console/cmd_ota.c"
+        "console/cmd_version.c"
         "ble/ble_app.c"
         "ble/gatt_svr.c"
     INCLUDE_DIRS

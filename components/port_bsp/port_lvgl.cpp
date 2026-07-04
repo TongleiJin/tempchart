@@ -13,6 +13,7 @@
 #define TAG "port_lvgl"
 
 static SemaphoreHandle_t lvgl_mux = NULL;
+static volatile bool s_lvgl_paused = false;
 #define BYTES_PER_PIXEL (LV_COLOR_FORMAT_GET_SIZE(LV_COLOR_FORMAT_RGB565))
 
 static void Increase_lvgl_tick(void *arg) {
@@ -31,11 +32,34 @@ void Lvgl_unlock(void)
   	xSemaphoreGive(lvgl_mux);
 }
 
+bool Lvgl_IsRefreshPaused(void)
+{
+	return s_lvgl_paused;
+}
+
+void Lvgl_PauseRefresh(void)
+{
+	s_lvgl_paused = true;
+	if (Lvgl_lock(5000)) {
+		Lvgl_unlock();
+	}
+	vTaskDelay(pdMS_TO_TICKS(200));
+}
+
+void Lvgl_ResumeRefresh(void)
+{
+	s_lvgl_paused = false;
+}
+
 static void Lvgl_port_task(void *arg)
 {
   	uint32_t task_delay_ms = LVGL_TASK_MAX_DELAY_MS;
   	for(;;)
   	{
+		if (s_lvgl_paused) {
+			vTaskDelay(pdMS_TO_TICKS(LVGL_TASK_MAX_DELAY_MS));
+			continue;
+		}
   	  	if (Lvgl_lock(-1)) 
   	  	{
   	  	  	task_delay_ms = lv_timer_handler();
