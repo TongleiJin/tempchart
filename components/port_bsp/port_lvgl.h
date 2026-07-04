@@ -16,6 +16,7 @@ extern "C" {
 typedef void (*DispFlushCb)(lv_display_t * disp, const lv_area_t * area, uint8_t * color_p);
 
 void Lvgl_PortInit(DispFlushCb flush_cb);
+void Lvgl_PortInitEpaper(void);
 bool Lvgl_lock(int timeout_ms);
 void Lvgl_unlock(void);
 bool Lvgl_IsRefreshPaused(void);
