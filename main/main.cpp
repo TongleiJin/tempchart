@@ -1,79 +1,8 @@
-#include <stdio.h>
-#include <freertos/FreeRTOS.h>
-#include <esp_timer.h>
-#include <esp_log.h>
-#include <esp_err.h>
-#include <esp_log.h>
-#include "lvgl.h"
-#include "port_display.h"
-#include "port_lvgl.h"
 #include "user_app.h"
 #include "console_init.h"
 
-static void Lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *color_p)
-{
-	if (Lvgl_IsRefreshPaused()) {
-		lv_disp_flush_ready(disp);
-		return;
-	}
-	uint16_t *buffer = (uint16_t *)color_p;
-	EPD_Clear();
-	for (int y = area->y1; y <= area->y2; y++)
-	{
-		for (int x = area->x1; x <= area->x2; x++)
-		{
-			uint8_t color = (*buffer < 0x7fff) ? DRIVER_COLOR_BLACK : DRIVER_COLOR_WHITE;
-			EPD_DrawColorPixel(x, y, color);
-			buffer++;
-		}
-	}
-	EPD_DisplayPart();
-	lv_disp_flush_ready(disp);
-}
-
-// 静态内容省电，动态会糊
-// static void Lvgl_flush_cb(lv_display_t * disp, const lv_area_t * area, uint8_t * color_p)
-// {
-//     uint16_t scr_w = lv_display_get_horizontal_resolution(disp);
-//     uint16_t scr_h = lv_display_get_vertical_resolution(disp);
-//     bool is_full_refresh = (area->x1 == 0 && area->y1 == 0 && area->x2 == scr_w - 1 && area->y2 == scr_h - 1);
-
-//     uint16_t *buffer = (uint16_t *)color_p;
-
-//     // 只有硬件全刷时才清空全局显存，局部刷新禁止EPD_Clear
-//     if(is_full_refresh)
-//     {
-//         EPD_Clear();
-//     }
-
-//     for(int y = area->y1; y <= area->y2; y++)
-//     {
-//         for(int x = area->x1; x <= area->x2; x++)
-//         {
-//             uint8_t color = (*buffer < 0x7fff) ? DRIVER_COLOR_BLACK : DRIVER_COLOR_WHITE;
-//             EPD_DrawColorPixel(x,y,color);
-//             buffer++;
-//         }
-//     }
-
-//     if(is_full_refresh)
-//     {
-//         EPD_Display();      // 硬件全刷：会闪一下，清除残影
-//     }
-//     else
-//     {
-//         EPD_DisplayPart();  // 局部快刷：无闪烁，快速更新
-//     }
-
-//     lv_disp_flush_ready(disp);
-// }
-
 extern "C" void app_main(void)
 {
-	UserApp_Init();
-	PortLvgl_Start_Init();
-	Lvgl_PortInit(Lvgl_flush_cb);
-	UserUi_Init();
-	UserApp_Start_Init();
-	Console_Init();
+    TempchartApp_Start();
+    Console_Init();
 }

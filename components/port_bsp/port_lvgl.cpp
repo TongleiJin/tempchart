@@ -98,6 +98,26 @@ static void Lvgl_port_task(void *arg)
   	}
 }
 
+static void Lvgl_epaper_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *color_p)
+{
+    if (Lvgl_IsRefreshPaused()) {
+        lv_disp_flush_ready(disp);
+        return;
+    }
+
+    uint16_t *buffer = (uint16_t *)color_p;
+    EPD_Clear();
+    for (int y = area->y1; y <= area->y2; y++) {
+        for (int x = area->x1; x <= area->x2; x++) {
+            uint8_t color = (*buffer < 0x7fff) ? DRIVER_COLOR_BLACK : DRIVER_COLOR_WHITE;
+            EPD_DrawColorPixel(x, y, color);
+            buffer++;
+        }
+    }
+    EPD_DisplayPart();
+    lv_disp_flush_ready(disp);
+}
+
 void Lvgl_PortInit(DispFlushCb flush_cb) {
     lvgl_mux = xSemaphoreCreateMutex();
     lv_init();
@@ -122,6 +142,11 @@ void Lvgl_PortInit(DispFlushCb flush_cb) {
   	ESP_ERROR_CHECK(esp_timer_start_periodic(s_lvgl_tick_timer, LVGL_TICK_PERIOD_MS * 1000));
 
     xTaskCreatePinnedToCore(Lvgl_port_task, "LVGL", 8 * 1024, NULL, 5, &s_lvgl_task, 0);
+}
+
+void Lvgl_PortInitEpaper(void)
+{
+    Lvgl_PortInit(Lvgl_epaper_flush_cb);
 }
 
 

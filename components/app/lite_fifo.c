@@ -7,7 +7,7 @@
 // should test the data existence by isEmpty
 // before call this method
 //uint16_t litefifo::popData(void)
-bool fifo_PopData(liteFifo_t *fifo, user_data_t *data)
+bool fifo_PopData(liteFifo_t *fifo, temp_sample_t *data)
 {
     if (fifo_IsEmpty(fifo))
     {
@@ -30,7 +30,7 @@ bool fifo_PopData(liteFifo_t *fifo, user_data_t *data)
 // should test the data existence by isEmpty
 // before call this method
 // just test the very front data, no index operation
-bool fifo_PickData(liteFifo_t *fifo, user_data_t *data)
+bool fifo_PickData(liteFifo_t *fifo, temp_sample_t *data)
 {
     if (fifo_IsEmpty(fifo))
     {
@@ -45,7 +45,7 @@ bool fifo_PickData(liteFifo_t *fifo, user_data_t *data)
 // append one data
 // return false if already full
 //bool litefifo::pushData(uint16_t data)
-bool fifo_PushData(liteFifo_t *fifo, user_data_t data, bool force)
+bool fifo_PushData(liteFifo_t *fifo, temp_sample_t data, bool force)
 {
     if (fifo_IsFull(fifo) && (force==false))
     {
@@ -91,7 +91,7 @@ bool fifo_IsEmpty(liteFifo_t *fifo)
 
 
 
-void fifo_CreateLiteFifo(liteFifo_t *fifo, uint16_t maxLen, user_data_t *buf)
+void fifo_CreateLiteFifo(liteFifo_t *fifo, uint16_t maxLen, temp_sample_t *buf)
 {
     // TODO Auto-generated constructor stub
     fifo->MAX_LEN = maxLen;
@@ -103,7 +103,7 @@ void fifo_CreateLiteFifo(liteFifo_t *fifo, uint16_t maxLen, user_data_t *buf)
 }
 
 
-void fifo_CopyData(liteFifo_t *fifo, user_data_t *buf, uint16_t len)
+void fifo_CopyData(liteFifo_t *fifo, temp_sample_t *buf, uint16_t len)
 {
     if (len > fifo->MAX_LEN)
     {

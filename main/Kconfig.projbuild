@@ -14,7 +14,7 @@ menu "App Configuration"
 
     config APP_OTA_FIRMWARE_URL
         string "OTA firmware HTTPS URL (default)"
-        default "https://192.168.1.100:8070/smart_tempchart.bin"
+        default "https://192.168.1.100:8070/tempchart.bin"
         help
             Default OTA URL when NVS has no saved value.
             Use the same CA cert as server_certs/ca_cert.pem for HTTPS.
@@ -27,7 +27,7 @@ menu "App Configuration"
 
     config APP_OTA_FIRMWARE_PATH
         string "OTA firmware path"
-        default "/smart_tempchart.bin"
+        default "/tempchart.bin"
         help
             Firmware path appended when building OTA URL from IP/host via ota_url set.
 
