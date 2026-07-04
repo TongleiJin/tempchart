@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
 #include <driver/gpio.h>
 #include <esp_log.h>
 #include "user_app.h"
@@ -14,13 +13,10 @@
 #include "port_sdcard.h"
 #include "port_lvgl.h"
 #include "port_adc.h"
-#include "port_shtc3.h"
-#include "port_sht31.h"
-#include "port_codec.h"
 #include "esp_timer.h"
 #include "temp_sample.h"
-#include "lite_fifo.h"
-#include "port_display.h"
+#include "temp_sampler.h"
+#include "port_codec.h"
 
 #define TAG "app"
 #define LED_BLINK_BIT 0x80
@@ -41,40 +37,29 @@ static TaskHandle_t s_led_task = NULL;
 static TaskHandle_t s_lvgl_loop_task = NULL;
 static TaskHandle_t s_key_task = NULL;
 static TaskHandle_t s_touch_task = NULL;
-static SemaphoreHandle_t temp_read_mutex = NULL;
-
-static bool read_temp_humidity(float *temperature, float *humidity);
 
 static int setting_target_id = 0;
 
 int overallInfoPageNumber = 1;
 
-#define MAX_TEMP_FIFO_SIZE 100
+#define MAX_TEMP_FIFO_SIZE TEMP_SAMPLER_MAX_SAMPLES
 #define MAX_TEMP_DETAIL_TOTAL_PAGE (MAX_TEMP_FIFO_SIZE / 10)
 
 int tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE;
-static float max_temp = 0;
-static float min_temp = 100;
 
 static lv_timer_t *temp_timer = NULL;
 static const uint32_t temp_period_list[] = {3000, 20000, 60000, 300000};
 
 static const uint32_t chartPointList[] = {20, 40, 100};
-static const char *temp_sensor_source_list[] = {"SHTC3", "SHT31"};
 static const size_t temp_period_count = sizeof(temp_period_list) / sizeof(temp_period_list[0]);
-static const size_t temp_sensor_source_count = sizeof(temp_sensor_source_list) / sizeof(temp_sensor_source_list[0]);
-static size_t temp_period_selected_index = 0; // default selected 3000ms
-static size_t temp_period_active_index = 0;   // default active 3000ms
-static size_t chartPointsSelectedIndex = 0;   // default selected 10 points
-static size_t chartPointsActiveIndex = 0;     // default active 10 points
-static size_t temp_sensor_source_selected_index = 0; // default selected SHTC3
-static size_t temp_sensor_source_active_index = 0;   // default active SHTC3
+static size_t temp_period_selected_index = 0;
+static size_t temp_period_active_index = 0;
+static size_t chartPointsSelectedIndex = 0;
+static size_t chartPointsActiveIndex = 0;
+static size_t temp_sensor_source_selected_index = 0;
 
-static uint32_t temp_sample_count = 0;
 uint16_t TEMP_OFFSET = 20;
 const uint16_t TEMP_SCALER = 3;
-// define the fifo for user data, with a capacity of 100 records
-static liteFifo_t tempDataFifo;
 
 static void do_overall_update(void);
 void Task_led_loop(void *arg);
@@ -85,54 +70,9 @@ void Task_touch_loop(void *arg);
 static void gpio_isr_handler(void *arg);
 void Touch_ISR_GPIO_Init();
 
-static bool read_temp_humidity(float *temperature, float *humidity)
-{
-    if (!temperature || !humidity)
-    {
-        return false;
-    }
-
-    if (!temp_read_mutex)
-    {
-        return false;
-    }
-
-    if (xSemaphoreTake(temp_read_mutex, portMAX_DELAY) != pdTRUE)
-    {
-        return false;
-    }
-
-    bool success = false;
-    float t = -1000.0f;
-    float h = -1000.0f;
-
-    if (temp_sensor_source_active_index == 1)
-    {
-        Sht31_ReadTempHumi(&t, &h);
-    }
-    else
-    {
-        Shtc3_ReadTempHumi(&t, &h);
-    }
-
-    if (t != -1000.0f && h != -1000.0f)
-    {
-        success = true;
-    }
-
-    if (success)
-    {
-        *temperature = t;
-        *humidity = h;
-    }
-
-    xSemaphoreGive(temp_read_mutex);
-    return success;
-}
-
 bool UserApp_ReadTempHumidity(float *temperature, float *humidity)
 {
-    return read_temp_humidity(temperature, humidity);
+    return temp_sampler_read(temperature, humidity);
 }
 
 void UserApp_GetTimeStr(char *buf, size_t len)
@@ -158,29 +98,14 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     pcf85063a_datetime_t current_time = {};
     float t, h;
 
-    if (!read_temp_humidity(&t, &h))
+    if (!temp_sampler_read(&t, &h))
     {
         ESP_LOGE(TAG, "Failed to read temperature and humidity");
         return;
     }
 
     pcf85063a_get_time_date(&pcf85063, &current_time);
-    
-    temp_sample_t ud;
-
-    ud.temperature = t;
-    ud.timestamp = current_time;
-    fifo_PushData(&tempDataFifo, ud, true);
-    temp_sample_count++;
-    if (t > max_temp)
-    {
-        max_temp = t;
-    }
-    if (t < min_temp)
-    {
-        min_temp = t;
-    }
-    // ESP_LOGI(TAG, "Sample_%ld: %.1f %.1f", temp_sample_count, t, h);
+    temp_sampler_push(t, &current_time);
 }
 
 
@@ -214,15 +139,9 @@ void UserApp_Init()
     }
     InitializeButtons();
     BoardAdc_Init();
-    Shtc3_Init(i2c_bus);
-    Sht31_Init(i2c_bus);
-    temp_read_mutex = xSemaphoreCreateMutex();
-    assert(temp_read_mutex);
+    temp_sampler_init(i2c_bus);
     Touch_ISR_GPIO_Init();
     Codec_StartInit();
-    temp_sample_t *buf = (temp_sample_t *)heap_caps_malloc(sizeof(temp_sample_t) * MAX_TEMP_FIFO_SIZE, MALLOC_CAP_SPIRAM);
-    lv_memset(buf, 0, sizeof(temp_sample_t) * MAX_TEMP_FIFO_SIZE);
-    fifo_CreateLiteFifo(&tempDataFifo, MAX_TEMP_FIFO_SIZE, buf);
 }
 
 static void show_container(int container_number)
@@ -266,7 +185,8 @@ static void show_container(int container_number)
             }
             else if (setting_target_id == 2)
             {
-                snprintf(buf, sizeof(buf), "Sensor Src Sel:%s", temp_sensor_source_list[temp_sensor_source_selected_index]);
+                snprintf(buf, sizeof(buf), "Sensor Src Sel:%s",
+                         temp_sampler_get_sensor_source_name(temp_sensor_source_selected_index));
                 lv_label_set_text(scr_ui.label_touch_event, buf);
             }
         }
@@ -294,15 +214,16 @@ void do_overall_update(void)
     {
         uint32_t active_s = temp_period_list[temp_period_active_index] / 1000;
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Sample period: %lu", active_s);
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sample_count);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sampler_get_count());
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset: %u", TEMP_OFFSET);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp scaler: %u", TEMP_SCALER);
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nChart size: %lu", lv_chart_get_point_count(scr_ui.temp_chart));
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSensor Src: %s", temp_sensor_source_list[temp_sensor_source_active_index]);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSensor Src: %s",
+                 temp_sampler_get_sensor_source_name(temp_sampler_get_sensor_source()));
 
         float t = 0.0f;
         float h = 0.0f;
-        if (read_temp_humidity(&t, &h))
+        if (temp_sampler_read(&t, &h))
         {
             snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: %.1f°C\nHum: %.1f%%", t, h);
         }
@@ -341,8 +262,10 @@ static void touch_on_next(void)
     }
     else
     {
-        temp_sensor_source_selected_index = (temp_sensor_source_selected_index + 1) % temp_sensor_source_count;
-        snprintf(buf, sizeof(buf), "Sensor Src Sel:%s", temp_sensor_source_list[temp_sensor_source_selected_index]);
+        temp_sensor_source_selected_index =
+            (temp_sensor_source_selected_index + 1) % temp_sampler_get_sensor_source_count();
+        snprintf(buf, sizeof(buf), "Sensor Src Sel:%s",
+                 temp_sampler_get_sensor_source_name(temp_sensor_source_selected_index));
     }
     lv_label_set_text(scr_ui.label_touch_event, buf);
 }
@@ -361,7 +284,7 @@ static void touch_on_active_button(void)
     }
     else
     {
-        temp_sensor_source_active_index = temp_sensor_source_selected_index;
+        temp_sampler_set_sensor_source(temp_sensor_source_selected_index);
     }
 
     lv_label_set_text(scr_ui.label_touch_event, "actived");
@@ -383,8 +306,9 @@ static void touch_on_cancel_button(void)
     }
     else
     {
-        temp_sensor_source_selected_index = temp_sensor_source_active_index;
-        snprintf(buf, sizeof(buf), "Temp Src | Sel:%s", temp_sensor_source_list[temp_sensor_source_selected_index]);
+        temp_sensor_source_selected_index = temp_sampler_get_sensor_source();
+        snprintf(buf, sizeof(buf), "Temp Src | Sel:%s",
+                 temp_sampler_get_sensor_source_name(temp_sensor_source_selected_index));
     }
     lv_label_set_text(scr_ui.label_touch_event, buf);
 
@@ -404,7 +328,8 @@ static void touch_on_more_button(void)
     {
         setting_target_id = 2;
         char buf[80];
-        snprintf(buf, sizeof(buf), "Sensor Src Mode:%s", temp_sensor_source_list[temp_sensor_source_selected_index]);
+        snprintf(buf, sizeof(buf), "Sensor Src Mode:%s",
+                 temp_sampler_get_sensor_source_name(temp_sensor_source_selected_index));
         lv_label_set_text(scr_ui.label_touch_event, buf);
     }
     else
@@ -578,7 +503,7 @@ void do_temp_chart_update(void)
 
     temp_sample_t temp_record[MAX_TEMP_FIFO_SIZE];
 
-    fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
+    temp_sampler_copy_samples(temp_record, MAX_TEMP_FIFO_SIZE);
     int point_count = (int)lv_chart_get_point_count(scr_ui.temp_chart);
     // ESP_LOGI(TAG, "Updating chart with %d points", point_count);
     totalValue = 0;
@@ -636,15 +561,15 @@ void do_temp_list_update(void)
 {
     // copy all temperature records to temp_record buffer and update the detail label text according to tempDetailPageNumber
     temp_sample_t temp_record[MAX_TEMP_FIFO_SIZE];
-    fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
+    temp_sampler_copy_samples(temp_record, MAX_TEMP_FIFO_SIZE);
 
     char buf[256] = "";
     char record_buf[64];
     if (tempDetailPageNumber >= MAX_TEMP_DETAIL_TOTAL_PAGE)
     {
-        snprintf(record_buf, sizeof(record_buf), "\nMax: %0.1f°C\n", max_temp);
+        snprintf(record_buf, sizeof(record_buf), "\nMax: %0.1f°C\n", temp_sampler_get_max());
         strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
-        snprintf(record_buf, sizeof(record_buf), "Min: %0.1f°C\n", min_temp);
+        snprintf(record_buf, sizeof(record_buf), "Min: %0.1f°C\n", temp_sampler_get_min());
         strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
         tempDetailPageNumber = MAX_TEMP_DETAIL_TOTAL_PAGE;
     }
