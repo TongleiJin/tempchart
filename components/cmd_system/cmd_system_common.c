@@ -144,7 +144,7 @@ static void register_restart(void)
 
 static int free_mem(int argc, char **argv)
 {
-    printf("%"PRIu32"\n", esp_get_free_heap_size());
+    printf("Free22: %"PRIu32"\n", esp_get_free_heap_size());
     return 0;
 }
 
