@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "esp_app_desc.h"
+#include "firmware_version.h"
 
 uint32_t app_version_code_from_string(const char *version)
 {
@@ -46,5 +46,5 @@ int app_version_compare_strings(const char *lhs, const char *rhs)
 
 uint32_t app_version_code(void)
 {
-    return app_version_code_from_string(esp_app_get_description()->version);
+    return app_version_code_from_string(firmware_version);
 }
