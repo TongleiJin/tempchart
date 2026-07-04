@@ -5,6 +5,7 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -18,7 +19,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "nvs_flash.h"
+#include "ota_url_store.h"
 
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
@@ -37,14 +38,14 @@ static void ota_http_cleanup(esp_http_client_handle_t client)
 
 static void ota_task(void *param)
 {
-    (void)param;
+    char *url = (char *)param;
     esp_err_t err;
     esp_ota_handle_t update_handle = 0;
     const esp_partition_t *update_partition = NULL;
     const esp_partition_t *running = esp_ota_get_running_partition();
 
     esp_http_client_config_t config = {
-        .url = CONFIG_APP_OTA_FIRMWARE_URL,
+        .url = url,
         .cert_pem = (char *)server_cert_pem_start,
         .timeout_ms = CONFIG_APP_OTA_RECV_TIMEOUT,
         .keep_alive_enable = true,
@@ -159,6 +160,7 @@ static void ota_task(void *param)
     esp_restart();
 
 done:
+    free(url);
     s_ota_running = false;
     vTaskDelete(NULL);
 }
@@ -179,9 +181,22 @@ static int cmd_ota_start(int argc, char **argv)
         return 1;
     }
 
-    printf("Starting OTA from: %s\n", CONFIG_APP_OTA_FIRMWARE_URL);
+    char url[OTA_URL_MAX_LEN];
+    if (ota_url_get(url, sizeof(url)) != ESP_OK) {
+        printf("Failed to read OTA URL\n");
+        return 1;
+    }
+
+    char *url_copy = strdup(url);
+    if (url_copy == NULL) {
+        printf("Out of memory\n");
+        return 1;
+    }
+
+    printf("Starting OTA from: %s\n", url_copy);
     s_ota_running = true;
-    if (xTaskCreate(ota_task, "ota_task", 8192, NULL, 5, NULL) != pdPASS) {
+    if (xTaskCreate(ota_task, "ota_task", 8192, url_copy, 5, NULL) != pdPASS) {
+        free(url_copy);
         s_ota_running = false;
         printf("Failed to create OTA task\n");
         return 1;
@@ -207,8 +222,68 @@ static int cmd_ota_info(int argc, char **argv)
     if (next) {
         printf("Next OTA : %s @ 0x%lx\n", next->label, (unsigned long)next->address);
     }
-    printf("OTA URL  : %s\n", CONFIG_APP_OTA_FIRMWARE_URL);
+
+    char url[OTA_URL_MAX_LEN];
+    if (ota_url_get(url, sizeof(url)) == ESP_OK) {
+        printf("OTA URL  : %s\n", url);
+    } else {
+        printf("OTA URL  : (unavailable)\n");
+    }
     return 0;
+}
+
+static int cmd_ota_url_handler(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("Usage:\n");
+        printf("  ota_url get\n");
+        printf("  ota_url set <ip_or_host>\n");
+        printf("  ota_url clear\n");
+        return 1;
+    }
+
+    if (strcmp(argv[1], "get") == 0) {
+        char url[OTA_URL_MAX_LEN];
+        if (ota_url_get(url, sizeof(url)) != ESP_OK) {
+            printf("Failed to read OTA URL\n");
+            return 1;
+        }
+        printf("OTA URL: %s\n", url);
+        return 0;
+    }
+
+    if (strcmp(argv[1], "set") == 0) {
+        if (argc < 3) {
+            printf("Usage: ota_url set <ip_or_host>\n");
+            return 1;
+        }
+
+        if (ota_url_set_host(argv[2]) != ESP_OK) {
+            printf("Failed to save OTA URL\n");
+            return 1;
+        }
+
+        char url[OTA_URL_MAX_LEN];
+        ota_url_get(url, sizeof(url));
+        printf("OTA URL saved: %s\n", url);
+        return 0;
+    }
+
+    if (strcmp(argv[1], "clear") == 0) {
+        if (ota_url_clear() != ESP_OK) {
+            printf("Failed to clear OTA URL\n");
+            return 1;
+        }
+
+        char url[OTA_URL_MAX_LEN];
+        ota_url_get(url, sizeof(url));
+        printf("OTA URL reset to default: %s\n", url);
+        return 0;
+    }
+
+    printf("Unknown subcommand '%s'\n", argv[1]);
+    printf("Usage: ota_url get | set <ip_or_host> | clear\n");
+    return 1;
 }
 
 void register_cmd_ota(void)
@@ -228,4 +303,12 @@ void register_cmd_ota(void)
         .func = &cmd_ota_info,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&info));
+
+    const esp_console_cmd_t url = {
+        .command = "ota_url",
+        .help = "OTA URL in NVS: get | set <ip_or_host> | clear",
+        .hint = NULL,
+        .func = &cmd_ota_url_handler,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&url));
 }
