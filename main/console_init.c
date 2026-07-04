@@ -8,10 +8,10 @@
 
 #include "ble_app.h"
 #include "cmd_system.h"
-#include "cmd_wifi.h"
 #include "cmd_nvs.h"
 #include "cmd_board.h"
 #include "cmd_sensor.h"
+#include "cmd_wifi_conn.h"
 #include "cmd_ota.h"
 
 static const char *TAG = "console";
@@ -43,6 +43,9 @@ void Console_Init(void)
     initialize_nvs();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+#if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
+    ESP_ERROR_CHECK(wifi_stack_init());
+#endif
     ESP_ERROR_CHECK(ble_app_init());
 
     esp_console_register_help_command();
@@ -55,7 +58,7 @@ void Console_Init(void)
 #endif
     register_nvs();
 #if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
-    register_wifi();
+    register_cmd_wifi();
 #endif
     register_cmd_board();
     register_cmd_sensor();

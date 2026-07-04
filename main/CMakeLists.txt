@@ -6,6 +6,7 @@ idf_component_register(
         "console_init.c"
         "console/cmd_board.c"
         "console/cmd_sensor.c"
+        "console/cmd_wifi_conn.c"
         "console/cmd_ota.c"
         "ble/ble_app.c"
         "ble/gatt_svr.c"
