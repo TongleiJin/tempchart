@@ -209,7 +209,7 @@ static void app_show_container(int container_number)
     {
         const esp_app_desc_t *app = esp_app_get_description();
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Ver: %s (%lu)",
-                 app->version, (unsigned long)APP_VERSION_CODE);
+                 app->version, (unsigned long)app_version_code());
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nBuild: %s %s", app->date, app->time);
 
         wifi_sta_status_t wifi;

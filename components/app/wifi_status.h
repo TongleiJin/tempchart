@@ -15,6 +15,7 @@ typedef struct {
     char gateway[16];
 } wifi_sta_status_t;
 
+bool wifi_sta_is_connected(void);
 bool wifi_sta_get_status(wifi_sta_status_t *status);
 
 #ifdef __cplusplus

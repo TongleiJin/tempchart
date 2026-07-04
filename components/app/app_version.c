@@ -44,7 +44,7 @@ int app_version_compare_strings(const char *lhs, const char *rhs)
     return 0;
 }
 
-uint32_t app_version_running_code(void)
+uint32_t app_version_code(void)
 {
     return app_version_code_from_string(esp_app_get_description()->version);
 }

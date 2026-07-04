@@ -6,6 +6,12 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 
+bool wifi_sta_is_connected(void)
+{
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    return netif != NULL && esp_netif_is_netif_up(netif);
+}
+
 bool wifi_sta_get_status(wifi_sta_status_t *status)
 {
     if (status == NULL) {
@@ -13,6 +19,10 @@ bool wifi_sta_get_status(wifi_sta_status_t *status)
     }
 
     memset(status, 0, sizeof(*status));
+
+    if (!wifi_sta_is_connected()) {
+        return false;
+    }
 
     wifi_ap_record_t ap_info;
     if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {

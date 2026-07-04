@@ -10,7 +10,7 @@
 
 #include "esp_console.h"
 #include "esp_log.h"
-#include "esp_wifi.h"
+#include "wifi_status.h"
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
@@ -122,8 +122,7 @@ static int cmd_ping_handler(int argc, char **argv)
         return 1;
     }
 
-    wifi_ap_record_t ap_info;
-    if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
+    if (!wifi_sta_is_connected()) {
         printf("Wi-Fi not connected. Run: wifi connect <ssid> [password]\n");
         return 1;
     }
