@@ -18,7 +18,7 @@
 #include "port_sht31.h"
 #include "port_codec.h"
 #include "esp_timer.h"
-#include "user_data_type.h"
+#include "temp_sample.h"
 #include "lite_fifo.h"
 #include "port_display.h"
 
@@ -166,7 +166,7 @@ static void temp_update_timer_cb(lv_timer_t *timer)
 
     pcf85063a_get_time_date(&pcf85063, &current_time);
     
-    user_data_t ud;
+    temp_sample_t ud;
 
     ud.temperature = t;
     ud.timestamp = current_time;
@@ -220,8 +220,8 @@ void UserApp_Init()
     assert(temp_read_mutex);
     Touch_ISR_GPIO_Init();
     Codec_StartInit();
-    user_data_t *buf = (user_data_t *)heap_caps_malloc(sizeof(user_data_t) * MAX_TEMP_FIFO_SIZE, MALLOC_CAP_SPIRAM);
-    lv_memset(buf, 0, sizeof(user_data_t) * MAX_TEMP_FIFO_SIZE);
+    temp_sample_t *buf = (temp_sample_t *)heap_caps_malloc(sizeof(temp_sample_t) * MAX_TEMP_FIFO_SIZE, MALLOC_CAP_SPIRAM);
+    lv_memset(buf, 0, sizeof(temp_sample_t) * MAX_TEMP_FIFO_SIZE);
     fifo_CreateLiteFifo(&tempDataFifo, MAX_TEMP_FIFO_SIZE, buf);
 }
 
@@ -572,11 +572,11 @@ void do_time_bat_update(void)
 
 void do_temp_chart_update(void)
 {
-    user_data_t tmpTemp;
+    temp_sample_t tmpTemp;
     float temp = 0;
     float totalValue = 0;
 
-    user_data_t temp_record[MAX_TEMP_FIFO_SIZE];
+    temp_sample_t temp_record[MAX_TEMP_FIFO_SIZE];
 
     fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
     int point_count = (int)lv_chart_get_point_count(scr_ui.temp_chart);
@@ -635,7 +635,7 @@ void do_temp_chart_update(void)
 void do_temp_list_update(void)
 {
     // copy all temperature records to temp_record buffer and update the detail label text according to tempDetailPageNumber
-    user_data_t temp_record[MAX_TEMP_FIFO_SIZE];
+    temp_sample_t temp_record[MAX_TEMP_FIFO_SIZE];
     fifo_CopyData(&tempDataFifo, temp_record, MAX_TEMP_FIFO_SIZE);
 
     char buf[256] = "";
@@ -655,7 +655,7 @@ void do_temp_list_update(void)
         strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
         for (int i = 0; i < 10; ++i)
         {
-            user_data_t record = temp_record[beginIndex + (10-1) - i];
+            temp_sample_t record = temp_record[beginIndex + (10-1) - i];
             snprintf(record_buf, sizeof(record_buf), "%02d  %02d:%02d:%02d>%.1f°C\n", i + 1, record.timestamp.hour, record.timestamp.min, record.timestamp.sec, record.temperature);
             strncat(buf, record_buf, sizeof(buf) - strlen(buf) - 1);
         }
