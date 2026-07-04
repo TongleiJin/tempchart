@@ -1,4 +1,4 @@
 cmake_minimum_required(VERSION 3.16)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 set(EXTRA_COMPONENT_DIRS components/externlib)
-project(11_Fac)
+project(smart_tempchart VERSION "1.0.5")

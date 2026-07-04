@@ -18,6 +18,10 @@ typedef void (*DispFlushCb)(lv_display_t * disp, const lv_area_t * area, uint8_t
 void Lvgl_PortInit(DispFlushCb flush_cb);
 bool Lvgl_lock(int timeout_ms);
 void Lvgl_unlock(void);
+bool Lvgl_IsRefreshPaused(void);
+void Lvgl_PauseRefresh(void);
+void Lvgl_ResumeRefresh(void);
+void Lvgl_ShutdownForOta(void);
 
 
 

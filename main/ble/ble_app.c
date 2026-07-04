@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_coexist.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "host/ble_hs.h"
@@ -201,4 +202,27 @@ esp_err_t ble_app_init(void)
 
     ESP_LOGI(TAG, "NimBLE peripheral ready, name=%s", CONFIG_APP_BLE_DEVICE_NAME);
     return ESP_OK;
+}
+
+esp_err_t ble_app_shutdown_for_ota(void)
+{
+    ESP_LOGI(TAG, "Stopping BLE for OTA...");
+
+    if (s_tick_notify_task != NULL) {
+        vTaskDelete(s_tick_notify_task);
+        s_tick_notify_task = NULL;
+    }
+
+    int rc = nimble_port_stop();
+    if (rc != 0) {
+        ESP_LOGW(TAG, "nimble_port_stop returned %d", rc);
+    }
+
+    esp_err_t ret = nimble_port_deinit();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "nimble_port_deinit: %s", esp_err_to_name(ret));
+    }
+
+    esp_coex_preference_set(ESP_COEX_PREFER_WIFI);
+    return ret;
 }

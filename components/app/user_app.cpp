@@ -37,6 +37,10 @@ static char Lvgl_buffer[60];
 static QueueHandle_t gpio_evt_queue = NULL;
 static uint8_t *audio_data_ptr = NULL;
 QueueHandle_t xTempDataQueue = NULL;
+static TaskHandle_t s_led_task = NULL;
+static TaskHandle_t s_lvgl_loop_task = NULL;
+static TaskHandle_t s_key_task = NULL;
+static TaskHandle_t s_touch_task = NULL;
 static SemaphoreHandle_t temp_read_mutex = NULL;
 
 static bool read_temp_humidity(float *temperature, float *humidity);
@@ -426,10 +430,42 @@ void UserUi_Init()
 
 void UserApp_Start_Init()
 {
-    xTaskCreatePinnedToCore(Task_led_loop, "Task_led_loop", 4 * 1024, NULL, 4, NULL, 1);
-    xTaskCreatePinnedToCore(Task_lvgl_loop, "Task_lvgl_loop", 5 * 1024, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(Task_key_loop, "Task_key_loop", 4 * 1024, NULL, 2, NULL, 1);
-    xTaskCreatePinnedToCore(Task_touch_loop, "Task_touch_loop", 4 * 1024, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(Task_led_loop, "Task_led_loop", 4 * 1024, NULL, 4, &s_led_task, 1);
+    xTaskCreatePinnedToCore(Task_lvgl_loop, "Task_lvgl_loop", 5 * 1024, NULL, 2, &s_lvgl_loop_task, 1);
+    xTaskCreatePinnedToCore(Task_key_loop, "Task_key_loop", 4 * 1024, NULL, 2, &s_key_task, 1);
+    xTaskCreatePinnedToCore(Task_touch_loop, "Task_touch_loop", 4 * 1024, NULL, 2, &s_touch_task, 1);
+}
+
+void UserApp_ShutdownForOta(void)
+{
+    ESP_LOGI(TAG, "Stopping app tasks for OTA...");
+
+    if (temp_timer != NULL) {
+        lv_timer_delete(temp_timer);
+        temp_timer = NULL;
+    }
+
+    if (s_touch_task != NULL) {
+        vTaskDelete(s_touch_task);
+        s_touch_task = NULL;
+    }
+    if (s_key_task != NULL) {
+        vTaskDelete(s_key_task);
+        s_key_task = NULL;
+    }
+    if (s_lvgl_loop_task != NULL) {
+        vTaskDelete(s_lvgl_loop_task);
+        s_lvgl_loop_task = NULL;
+    }
+    if (s_led_task != NULL) {
+        vTaskDelete(s_led_task);
+        s_led_task = NULL;
+    }
+
+    if (audio_data_ptr != NULL) {
+        heap_caps_free(audio_data_ptr);
+        audio_data_ptr = NULL;
+    }
 }
 
 void Task_led_loop(void *arg)

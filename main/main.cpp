@@ -12,6 +12,10 @@
 
 static void Lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *color_p)
 {
+	if (Lvgl_IsRefreshPaused()) {
+		lv_disp_flush_ready(disp);
+		return;
+	}
 	uint16_t *buffer = (uint16_t *)color_p;
 	EPD_Clear();
 	for (int y = area->y1; y <= area->y2; y++)
