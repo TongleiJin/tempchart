@@ -1,6 +1,7 @@
 #include "ota_url_store.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "esp_log.h"
@@ -41,6 +42,44 @@ static esp_err_t build_url_from_host(const char *host, char *buf, size_t len)
         return ESP_ERR_INVALID_SIZE;
     }
     return ESP_OK;
+}
+
+bool ota_url_parse_host_port(const char *url, char *host, size_t host_len, int *port)
+{
+    if (url == NULL || host == NULL || host_len == 0 || port == NULL) {
+        return false;
+    }
+
+    const char *p = url;
+    if (strncmp(p, "https://", 8) == 0) {
+        p += 8;
+    } else if (strncmp(p, "http://", 7) == 0) {
+        p += 7;
+    }
+
+    const char *slash = strchr(p, '/');
+    const char *colon = strchr(p, ':');
+    size_t len;
+
+    if (colon != NULL && (slash == NULL || colon < slash)) {
+        len = (size_t)(colon - p);
+        if (len == 0 || len >= host_len) {
+            return false;
+        }
+        memcpy(host, p, len);
+        host[len] = '\0';
+        *port = atoi(colon + 1);
+    } else {
+        len = slash ? (size_t)(slash - p) : strlen(p);
+        if (len == 0 || len >= host_len) {
+            return false;
+        }
+        memcpy(host, p, len);
+        host[len] = '\0';
+        *port = 443;
+    }
+
+    return *port > 0;
 }
 
 esp_err_t ota_url_get(char *buf, size_t len)

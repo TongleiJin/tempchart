@@ -14,6 +14,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "wifi_status.h"
 
 static const char *TAG = "cmd_wifi";
 #define WIFI_JOIN_TIMEOUT_MS 15000
@@ -83,31 +84,29 @@ static bool wifi_connect_to(const char *ssid, const char *pass, int timeout_ms)
 
 static void print_wifi_ip(void)
 {
-    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    if (netif == NULL) {
-        printf("Wi-Fi IP: interface not found\n");
-        return;
-    }
-
-    if (!esp_netif_is_netif_up(netif)) {
+    wifi_sta_status_t status;
+    if (!wifi_sta_get_status(&status)) {
         printf("Wi-Fi IP: not connected\n");
         return;
     }
 
-    esp_netif_ip_info_t ip_info;
-    if (esp_netif_get_ip_info(netif, &ip_info) != ESP_OK) {
-        printf("Wi-Fi IP: failed to read address\n");
+    if (status.ip[0] == '\0') {
+        printf("Wi-Fi IP: address not assigned\n");
         return;
     }
 
-    printf("IP      : " IPSTR "\n", IP2STR(&ip_info.ip));
-    printf("Netmask : " IPSTR "\n", IP2STR(&ip_info.netmask));
-    printf("Gateway : " IPSTR "\n", IP2STR(&ip_info.gw));
+    printf("IP      : %s\n", status.ip);
+    if (status.gateway[0] != '\0') {
+        printf("Gateway : %s\n", status.gateway);
+    }
 
-    esp_netif_dns_info_t dns;
-    if (esp_netif_get_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns) == ESP_OK &&
-        dns.ip.u_addr.ip4.addr != 0) {
-        printf("DNS     : " IPSTR "\n", IP2STR(&dns.ip.u_addr.ip4));
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (netif != NULL) {
+        esp_netif_dns_info_t dns;
+        if (esp_netif_get_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns) == ESP_OK &&
+            dns.ip.u_addr.ip4.addr != 0) {
+            printf("DNS     : " IPSTR "\n", IP2STR(&dns.ip.u_addr.ip4));
+        }
     }
 }
 
@@ -136,9 +135,9 @@ static int cmd_wifi_handler(int argc, char **argv)
             return 1;
         }
 
-        wifi_ap_record_t ap_info;
-        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
-            printf("Connected to '%s' (RSSI %d)\n", ap_info.ssid, ap_info.rssi);
+        wifi_sta_status_t status;
+        if (wifi_sta_get_status(&status)) {
+            printf("Connected to '%s' (RSSI %d)\n", status.ssid, status.rssi);
         } else {
             printf("Connected\n");
         }
@@ -146,12 +145,12 @@ static int cmd_wifi_handler(int argc, char **argv)
     }
 
     if (strcmp(argv[1], "status") == 0) {
-        wifi_ap_record_t ap_info;
-        if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
+        wifi_sta_status_t status;
+        if (!wifi_sta_get_status(&status)) {
             printf("Wi-Fi: not connected\n");
             return 0;
         }
-        printf("Wi-Fi: connected to '%s' (RSSI %d)\n", ap_info.ssid, ap_info.rssi);
+        printf("Wi-Fi: connected to '%s' (RSSI %d)\n", status.ssid, status.rssi);
         return 0;
     }
 

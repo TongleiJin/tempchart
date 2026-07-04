@@ -37,6 +37,3 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # HW AES needs DMA-capable internal RAM; software AES avoids OTA alloc failures
 # CONFIG_MBEDTLS_HARDWARE_AES is not set
 
-# Fixed app version string (overrides git describe in esp_app_desc)
-CONFIG_APP_PROJECT_VER_FROM_CONFIG=y
-CONFIG_APP_PROJECT_VER="1.0.4"

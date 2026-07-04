@@ -5,6 +5,7 @@
 #include "esp_app_desc.h"
 #include "esp_console.h"
 #include "esp_system.h"
+#include "app_version.h"
 
 static int cmd_version_handler(int argc, char **argv)
 {
@@ -14,6 +15,7 @@ static int cmd_version_handler(int argc, char **argv)
     const esp_app_desc_t *app = esp_app_get_description();
     printf("App     : %s\n", app->project_name);
     printf("Version : %s\n", app->version);
+    printf("Code    : %lu\n", (unsigned long)APP_VERSION_CODE);
     printf("IDF     : %s\n", esp_get_idf_version());
     return 0;
 }
