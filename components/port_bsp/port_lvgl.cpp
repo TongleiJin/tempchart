@@ -13,6 +13,8 @@
 #define TAG "port_lvgl"
 
 static SemaphoreHandle_t lvgl_mux = NULL;
+static TaskHandle_t s_lvgl_task = NULL;
+static esp_timer_handle_t s_lvgl_tick_timer = NULL;
 static volatile bool s_lvgl_paused = false;
 #define BYTES_PER_PIXEL (LV_COLOR_FORMAT_GET_SIZE(LV_COLOR_FORMAT_RGB565))
 
@@ -49,6 +51,25 @@ void Lvgl_PauseRefresh(void)
 void Lvgl_ResumeRefresh(void)
 {
 	s_lvgl_paused = false;
+}
+
+void Lvgl_ShutdownForOta(void)
+{
+	s_lvgl_paused = true;
+
+	if (s_lvgl_tick_timer != NULL) {
+		esp_timer_stop(s_lvgl_tick_timer);
+		esp_timer_delete(s_lvgl_tick_timer);
+		s_lvgl_tick_timer = NULL;
+	}
+
+	if (s_lvgl_task != NULL) {
+		if (Lvgl_lock(5000)) {
+			Lvgl_unlock();
+		}
+		vTaskDelete(s_lvgl_task);
+		s_lvgl_task = NULL;
+	}
 }
 
 static void Lvgl_port_task(void *arg)
@@ -97,11 +118,10 @@ void Lvgl_PortInit(DispFlushCb flush_cb) {
   	esp_timer_create_args_t lvgl_tick_timer_args = {};
   	lvgl_tick_timer_args.callback = &Increase_lvgl_tick;
   	lvgl_tick_timer_args.name = "lvgl_tick";
-    esp_timer_handle_t lvgl_tick_timer = NULL;
-  	ESP_ERROR_CHECK(esp_timer_create(&lvgl_tick_timer_args, &lvgl_tick_timer));
-  	ESP_ERROR_CHECK(esp_timer_start_periodic(lvgl_tick_timer,LVGL_TICK_PERIOD_MS * 1000));
+  	ESP_ERROR_CHECK(esp_timer_create(&lvgl_tick_timer_args, &s_lvgl_tick_timer));
+  	ESP_ERROR_CHECK(esp_timer_start_periodic(s_lvgl_tick_timer, LVGL_TICK_PERIOD_MS * 1000));
 
-    xTaskCreatePinnedToCore(Lvgl_port_task, "LVGL", 8 * 1024, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(Lvgl_port_task, "LVGL", 8 * 1024, NULL, 5, &s_lvgl_task, 0);
 }
 
 

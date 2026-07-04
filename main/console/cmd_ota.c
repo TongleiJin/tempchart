@@ -24,6 +24,8 @@
 #include "lwip/sockets.h"
 #include "ota_url_store.h"
 #include "port_lvgl.h"
+#include "user_app.h"
+#include "ble_app.h"
 
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
@@ -124,6 +126,17 @@ static bool ota_tcp_probe(const char *url)
 static void ota_prepare_network(void)
 {
     esp_wifi_set_ps(WIFI_PS_NONE);
+}
+
+static void ota_shutdown_subsystems(void)
+{
+    printf("Stopping non-OTA subsystems...\n");
+    Lvgl_PauseRefresh();
+    UserApp_ShutdownForOta();
+    Lvgl_ShutdownForOta();
+    ble_app_shutdown_for_ota();
+    vTaskDelay(pdMS_TO_TICKS(500));
+    ota_log_heap("After shutdown");
 }
 
 static void ota_http_cleanup(esp_http_client_handle_t client)
@@ -270,7 +283,7 @@ static void ota_task(void *param)
     esp_restart();
 
 done:
-    Lvgl_ResumeRefresh();
+    printf("OTA failed. Reboot device to restore BLE and UI.\n");
     heap_caps_free(ota_buf);
     free(url);
     s_ota_running = false;
@@ -306,17 +319,14 @@ static int cmd_ota_start(int argc, char **argv)
     }
 
     printf("Starting OTA from: %s\n", url_copy);
-    printf("Pausing UI refresh for OTA...\n");
-    Lvgl_PauseRefresh();
     ota_prepare_network();
     if (!ota_tcp_probe(url_copy)) {
-        Lvgl_ResumeRefresh();
         free(url_copy);
         return 1;
     }
+    ota_shutdown_subsystems();
     s_ota_running = true;
     if (xTaskCreate(ota_task, "ota_task", 12288, url_copy, 5, NULL) != pdPASS) {
-        Lvgl_ResumeRefresh();
         free(url_copy);
         s_ota_running = false;
         printf("Failed to create OTA task\n");

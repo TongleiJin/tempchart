@@ -21,6 +21,7 @@ void Lvgl_unlock(void);
 bool Lvgl_IsRefreshPaused(void);
 void Lvgl_PauseRefresh(void);
 void Lvgl_ResumeRefresh(void);
+void Lvgl_ShutdownForOta(void);
 
 
 

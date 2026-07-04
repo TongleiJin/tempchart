@@ -46,6 +46,7 @@ void register_system_common(void)
     register_free();
     register_heap();
     register_restart();
+    register_version();
 #if WITH_TASKS_INFO
     register_tasks();
 #endif

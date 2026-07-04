@@ -12,6 +12,7 @@ extern "C" {
 void UserApp_Init();
 void UserUi_Init();
 void UserApp_Start_Init();
+void UserApp_ShutdownForOta(void);
 bool UserApp_ReadTempHumidity(float *temperature, float *humidity);
 void UserApp_GetTimeStr(char *buf, size_t len);
 
