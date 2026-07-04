@@ -13,6 +13,7 @@
 #include "cmd_sensor.h"
 #include "cmd_wifi_conn.h"
 #include "cmd_ota.h"
+#include "cmd_ping.h"
 
 static const char *TAG = "console";
 #define PROMPT_STR "tempchart"
@@ -59,6 +60,7 @@ void Console_Init(void)
     register_nvs();
 #if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
     register_cmd_wifi();
+    register_cmd_ping();
 #endif
     register_cmd_board();
     register_cmd_sensor();

@@ -81,12 +81,43 @@ static bool wifi_connect_to(const char *ssid, const char *pass, int timeout_ms)
     return (bits & CONNECTED_BIT) != 0;
 }
 
+static void print_wifi_ip(void)
+{
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (netif == NULL) {
+        printf("Wi-Fi IP: interface not found\n");
+        return;
+    }
+
+    if (!esp_netif_is_netif_up(netif)) {
+        printf("Wi-Fi IP: not connected\n");
+        return;
+    }
+
+    esp_netif_ip_info_t ip_info;
+    if (esp_netif_get_ip_info(netif, &ip_info) != ESP_OK) {
+        printf("Wi-Fi IP: failed to read address\n");
+        return;
+    }
+
+    printf("IP      : " IPSTR "\n", IP2STR(&ip_info.ip));
+    printf("Netmask : " IPSTR "\n", IP2STR(&ip_info.netmask));
+    printf("Gateway : " IPSTR "\n", IP2STR(&ip_info.gw));
+
+    esp_netif_dns_info_t dns;
+    if (esp_netif_get_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns) == ESP_OK &&
+        dns.ip.u_addr.ip4.addr != 0) {
+        printf("DNS     : " IPSTR "\n", IP2STR(&dns.ip.u_addr.ip4));
+    }
+}
+
 static int cmd_wifi_handler(int argc, char **argv)
 {
     if (argc < 2) {
         printf("Usage:\n");
         printf("  wifi connect <ssid> [password]\n");
         printf("  wifi status\n");
+        printf("  wifi ip\n");
         return 1;
     }
 
@@ -124,8 +155,13 @@ static int cmd_wifi_handler(int argc, char **argv)
         return 0;
     }
 
+    if (strcmp(argv[1], "ip") == 0) {
+        print_wifi_ip();
+        return 0;
+    }
+
     printf("Unknown subcommand '%s'\n", argv[1]);
-    printf("Usage: wifi connect <ssid> [password] | wifi status\n");
+    printf("Usage: wifi connect <ssid> [password] | wifi status | wifi ip\n");
     return 1;
 }
 
@@ -133,7 +169,7 @@ void register_cmd_wifi(void)
 {
     const esp_console_cmd_t wifi_cmd = {
         .command = "wifi",
-        .help = "Wi-Fi commands: connect <ssid> [password] | status",
+        .help = "Wi-Fi commands: connect | status | ip",
         .hint = NULL,
         .func = &cmd_wifi_handler,
     };
