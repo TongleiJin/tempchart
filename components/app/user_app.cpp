@@ -8,7 +8,7 @@
 #include "port_ft6336.h"
 #include "port_i2c.h"
 #include "epaper_config.h"
-#include "FacTest_ui.h"
+#include "tempchart_ui.h"
 #include "pcf85063a.h"
 #include "button.h"
 #include "port_sdcard.h"
@@ -27,12 +27,12 @@
 
 static I2cMasterBus *i2c_bus = NULL;
 static I2cFt6336Dev *ft6336_dev = NULL;
-static lv_factest_ui scr_ui;
+static tempchart_ui_t scr_ui;
 static pcf85063a_dev_t pcf85063;  //  rtc句柄
 static bool pcf85063initflag = 1; //  rtc初始化成功标志位
 static Button *boot_button = nullptr;
 static Button *power_button = nullptr;
-static EventGroupHandle_t FacTestEventGroup = NULL; // 事件组句柄
+static EventGroupHandle_t tempchart_event_group = NULL;
 static char Lvgl_buffer[60];
 static QueueHandle_t gpio_evt_queue = NULL;
 static uint8_t *audio_data_ptr = NULL;
@@ -193,7 +193,7 @@ void UserApp_Init()
     BoardPower_EPD_ON();
     BoardPower_Audio_ON();
     BoardPower_VBAT_ON();
-    FacTestEventGroup = xEventGroupCreate();
+    tempchart_event_group = xEventGroupCreate();
     i2c_bus = I2cMasterBus::requestInstance(ESP32_I2C_SCL_PIN, ESP32_I2C_SDA_PIN, ESP32_I2C_DEV_NUM);
     assert(i2c_bus);
     ft6336_dev = I2cFt6336Dev::requestInstance(i2c_bus->Get_I2cBusHandle(), I2C_FT6336_DEV_Address, EPD_WIDTH, EPD_HEIGHT);
@@ -419,7 +419,7 @@ static void touch_on_more_button(void)
 
 void UserUi_Init()
 {
-    setup_factest_ui(&scr_ui);
+    tempchart_ui_create(&scr_ui);
 
     // Show only container 1 after power on.
     show_container(1);
@@ -482,7 +482,7 @@ void Task_led_loop(void *arg)
 
     for (;;)
     {
-        EventBits_t bits = xEventGroupWaitBits(FacTestEventGroup, LED_BLINK_BIT, pdTRUE, pdFALSE, portMAX_DELAY);
+        EventBits_t bits = xEventGroupWaitBits(tempchart_event_group, LED_BLINK_BIT, pdTRUE, pdFALSE, portMAX_DELAY);
         if (bits & LED_BLINK_BIT)
         {
             gpio_set_level(LED_PIN, 0);
@@ -726,32 +726,32 @@ void InitializeButtons(void)
     boot_button->OnClick([]()
                          {
                              ESP_LOGI(TAG, "boot_button click");
-                             xEventGroupSetBits(FacTestEventGroup, (0x10) | LED_BLINK_BIT); });
+                             xEventGroupSetBits(tempchart_event_group, (0x10) | LED_BLINK_BIT); });
 
     boot_button->OnDoubleClick([]()
                                {
                                     ESP_LOGI(TAG, "boot_button double click");
-                                    xEventGroupSetBits(FacTestEventGroup, (0x20) | LED_BLINK_BIT); });
+                                    xEventGroupSetBits(tempchart_event_group, (0x20) | LED_BLINK_BIT); });
 
     boot_button->OnLongPress([]()
                              {
                                  ESP_LOGI(TAG, "boot_button long press");
-                                 xEventGroupSetBits(FacTestEventGroup, (0x40) | LED_BLINK_BIT); });
+                                 xEventGroupSetBits(tempchart_event_group, (0x40) | LED_BLINK_BIT); });
 
     power_button->OnClick([]()
                           {
                               ESP_LOGI(TAG, "power_button click");
-                              xEventGroupSetBits(FacTestEventGroup, (0x01) | LED_BLINK_BIT); });
+                              xEventGroupSetBits(tempchart_event_group, (0x01) | LED_BLINK_BIT); });
 
     power_button->OnDoubleClick([]()
                                 {
                                     ESP_LOGI(TAG, "power_button double click");
-                                    xEventGroupSetBits(FacTestEventGroup, (0x02) | LED_BLINK_BIT); });
+                                    xEventGroupSetBits(tempchart_event_group, (0x02) | LED_BLINK_BIT); });
 
     power_button->OnLongPress([]()
                               {
                                   ESP_LOGI(TAG, "power_button long press");
-                                  xEventGroupSetBits(FacTestEventGroup, (0x04) | LED_BLINK_BIT); });
+                                  xEventGroupSetBits(tempchart_event_group, (0x04) | LED_BLINK_BIT); });
 }
 
 void ButtonEvent_PowerKeyClick(void)
@@ -821,7 +821,7 @@ void Task_key_loop(void *arg)
 {
     for (;;)
     {
-        EventBits_t even = xEventGroupWaitBits(FacTestEventGroup, (0x01) | (0x02) | (0x04) | (0x10) | (0x20) | (0x40), pdTRUE, pdFALSE, portMAX_DELAY);
+        EventBits_t even = xEventGroupWaitBits(tempchart_event_group, (0x01) | (0x02) | (0x04) | (0x10) | (0x20) | (0x40), pdTRUE, pdFALSE, portMAX_DELAY);
         if (even & 0x01)
         {
             ButtonEvent_PowerKeyClick();

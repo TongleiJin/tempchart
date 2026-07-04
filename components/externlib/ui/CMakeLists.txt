@@ -1,5 +1,5 @@
 idf_component_register(
-  SRCS "FacTest_ui.c"
+  SRCS "tempchart_ui.c"
   INCLUDE_DIRS "./"
   REQUIRES lvgl ui_res
 )

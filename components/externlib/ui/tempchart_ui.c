@@ -1,13 +1,13 @@
 #include "lvgl.h"
 #include <stdio.h>
-#include "FacTest_ui.h"
+#include "tempchart_ui.h"
 
 
 #define MAX_TEMP_CHART_POINT_COUNT 10
 
-static void setup_scr_screen(lv_factest_ui *ui);
+static void setup_scr_screen(tempchart_ui_t *ui);
 
-void setup_factest_ui(lv_factest_ui *ui) {
+void tempchart_ui_create(tempchart_ui_t *ui) {
 	lv_theme_apply(lv_layer_bottom());
 	ui->screen_del = true;
 	/*ui 初始化*/
@@ -88,7 +88,7 @@ static lv_obj_t * create_button(lv_obj_t *parent, int x, int y, int w, int h, co
 
 
 // 优化后的主函数
-void setup_scr_screen(lv_factest_ui *ui)
+void setup_scr_screen(tempchart_ui_t *ui)
 {
     // 创建主屏幕
     ui->screen = lv_obj_create(NULL);
@@ -199,5 +199,4 @@ void setup_scr_screen(lv_factest_ui *ui)
     // 更新布局
     lv_obj_update_layout(ui->screen);
 }
-
 

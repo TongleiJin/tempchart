@@ -1,5 +1,5 @@
-#ifndef FACTEST_UI
-#define FACTEST_UI
+#ifndef TEMPCHART_UI_H
+#define TEMPCHART_UI_H
 #ifdef __cplusplus
 extern "C"
 {
@@ -38,9 +38,9 @@ extern "C"
 		lv_obj_t *temp_chart;
 		lv_chart_series_t *temp_series;
 		
-	} lv_factest_ui;
+	} tempchart_ui_t;
 
-	void setup_factest_ui(lv_factest_ui *ui);
+	void tempchart_ui_create(tempchart_ui_t *ui);
 
 	LV_IMAGE_DECLARE(_shidu_RGB565A8_20x20);
 	LV_IMAGE_DECLARE(_wendu_RGB565A8_20x20);
