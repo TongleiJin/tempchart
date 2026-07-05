@@ -4,4 +4,4 @@ set(EXTRA_COMPONENT_DIRS components/third_party)
 
 # Fixed placeholder; real version is in components/firmware_version/firmware_version.c.
 set(PROJECT_VER "0")
-project(tempchart)
+project(smart_tempchart)

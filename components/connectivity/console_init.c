@@ -19,7 +19,7 @@
 #include "cmd_version.h"
 
 static const char *TAG = "console";
-#define PROMPT_STR "tempchart"
+#define PROMPT_STR "smart_tempchart"
 
 #if SOC_USB_SERIAL_JTAG_SUPPORTED
 #if !CONFIG_ESP_CONSOLE_SECONDARY_NONE

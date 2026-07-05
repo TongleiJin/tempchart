@@ -10,8 +10,8 @@
  * Single source of truth for firmware version.
  * Change FIRMWARE_VERSION_STRING here; only this file is recompiled.
  */
-#define FIRMWARE_VERSION_STRING "1.1.2"
-#define FIRMWARE_PROJECT_NAME "tempchart"
+#define FIRMWARE_VERSION_STRING "1.1.3"
+#define FIRMWARE_PROJECT_NAME "smart_tempchart"
 
 const char firmware_version[] = FIRMWARE_VERSION_STRING;
 
