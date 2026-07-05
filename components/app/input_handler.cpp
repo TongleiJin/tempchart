@@ -44,6 +44,11 @@ static size_t s_chart_points_active_index = 0;
 static size_t s_temp_sensor_source_selected_index = 0;
 static TickType_t s_touch_last_accept_tick = 0;
 
+static void touch_on_next(void);
+static void touch_on_active_button(void);
+static void touch_on_cancel_button(void);
+static void touch_on_more_button(void);
+
 static void touch_drain_pending_events(void)
 {
     uint32_t io_num;
@@ -133,10 +138,6 @@ static void touch_handle_point(uint16_t x, uint16_t y)
     }
 }
 
-static void touch_on_next(void);
-static void touch_on_active_button(void);
-static void touch_on_cancel_button(void);
-static void touch_on_more_button(void);
 static void handle_power_key_click(void);
 static void handle_power_key_double_click(void);
 static void handle_power_key_long_press(void);
