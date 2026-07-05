@@ -18,6 +18,7 @@ idf_component_register(
         "console"
         "ble"
     REQUIRES
+        firmware_version
         app
         port_bsp
         console

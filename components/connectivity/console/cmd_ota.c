@@ -23,6 +23,7 @@
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
 #include "ota_url_store.h"
+#include "firmware_version.h"
 #include "port_lvgl.h"
 #include "user_app.h"
 #include "ble_app.h"
@@ -346,7 +347,7 @@ static int cmd_ota_info(int argc, char **argv)
     esp_app_desc_t app_info;
 
     if (esp_ota_get_partition_description(running, &app_info) == ESP_OK) {
-        printf("Running : %s v%s\n", app_info.project_name, app_info.version);
+        printf("Running : %s v%s\n", app_info.project_name, firmware_version);
     }
     if (running) {
         printf("Partition: %s @ 0x%lx\n", running->label, (unsigned long)running->address);
