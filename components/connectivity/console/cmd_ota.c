@@ -23,6 +23,7 @@
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
 #include "ota_url_store.h"
+#include "firmware_version.h"
 #include "port_lvgl.h"
 #include "user_app.h"
 #include "ble_app.h"
@@ -346,7 +347,7 @@ static int cmd_ota_info(int argc, char **argv)
     esp_app_desc_t app_info;
 
     if (esp_ota_get_partition_description(running, &app_info) == ESP_OK) {
-        printf("Running : %s v%s\n", app_info.project_name, app_info.version);
+        printf("Running : %s v%s\n", app_info.project_name, firmware_version);
     }
     if (running) {
         printf("Partition: %s @ 0x%lx\n", running->label, (unsigned long)running->address);
@@ -403,13 +404,13 @@ static int cmd_ota_url_handler(int argc, char **argv)
 
     if (strcmp(argv[1], "clear") == 0) {
         if (ota_url_clear() != ESP_OK) {
-            printf("Failed to clear OTA URL\n");
+            printf("Failed to reset OTA URL in NVS\n");
             return 1;
         }
 
         char url[OTA_URL_MAX_LEN];
         ota_url_get(url, sizeof(url));
-        printf("OTA URL reset to default: %s\n", url);
+        printf("OTA URL reset in NVS: %s\n", url);
         return 0;
     }
 

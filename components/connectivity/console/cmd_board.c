@@ -6,6 +6,7 @@
 #include "epaper_config.h"
 #include "driver/gpio.h"
 #include "esp_app_desc.h"
+#include "firmware_version.h"
 #include "esp_chip_info.h"
 #include "esp_console.h"
 #include "esp_log.h"
@@ -26,7 +27,7 @@ static int cmd_board_info(int argc, char **argv)
     printf("Board : Waveshare ESP32-S3-Touch-ePaper-1.54\n");
     printf("Display: %dx%d e-paper\n", EPD_WIDTH, EPD_HEIGHT);
     printf("Cores : %d @ %dMHz\n", chip.cores, CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
-    printf("App   : %s v%s\n", app->project_name, app->version);
+    printf("App   : %s v%s\n", app->project_name, firmware_version);
     if (running) {
         printf("Part  : %s @ 0x%lx\n", running->label, (unsigned long)running->address);
     }

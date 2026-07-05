@@ -6,8 +6,9 @@ idf_component_register(
     "chart_controller.c"
     "input_handler.cpp"
     "home_view.c"
+    "device_status.c"
   INCLUDE_DIRS "."
-  REQUIRES esp_timer
+  REQUIRES esp_timer firmware_version ota_url
   PRIV_REQUIRES
     port_bsp
     ui
@@ -15,4 +16,6 @@ idf_component_register(
     my_button
     codec_board
     waveshare__pcf85063a
+    esp_wifi
+    esp_netif
 )

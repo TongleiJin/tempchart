@@ -5,7 +5,6 @@ idf_component_register(
         "console_init.c"
         "console/cmd_board.c"
         "console/cmd_sensor.c"
-        "console/ota_url_store.c"
         "console/cmd_wifi_conn.c"
         "console/cmd_ping.c"
         "console/cmd_ntp.c"
@@ -18,6 +17,8 @@ idf_component_register(
         "console"
         "ble"
     REQUIRES
+        firmware_version
+        ota_url
         app
         port_bsp
         console

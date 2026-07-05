@@ -9,6 +9,7 @@
 #include "ble_app.h"
 #include "cmd_system.h"
 #include "cmd_nvs.h"
+#include "ota_url_store.h"
 #include "cmd_board.h"
 #include "cmd_sensor.h"
 #include "cmd_wifi_conn.h"
@@ -44,6 +45,7 @@ void Console_Init(void)
     repl_config.max_cmdline_length = CONFIG_CONSOLE_MAX_COMMAND_LINE_LENGTH;
 
     initialize_nvs();
+    ESP_ERROR_CHECK(ota_url_store_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 #if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
@@ -52,7 +54,10 @@ void Console_Init(void)
     ESP_ERROR_CHECK(ble_app_init());
 
     esp_console_register_help_command();
-    register_cmd_version();
+
+    /* Help lists commands in registration order (sorted help disabled).
+     * Put rarely used / easy-to-remember commands first; keep wifi and
+     * similar commands last so they stay visible above the prompt. */
     register_system_common();
 #if SOC_LIGHT_SLEEP_SUPPORTED
     register_system_light_sleep();
@@ -60,15 +65,18 @@ void Console_Init(void)
 #if SOC_DEEP_SLEEP_SUPPORTED
     register_system_deep_sleep();
 #endif
+    register_cmd_version();
     register_nvs();
+    register_cmd_board();
+    register_cmd_sensor();
 #if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
-    register_cmd_wifi();
     register_cmd_ping();
     register_cmd_ntp();
 #endif
-    register_cmd_board();
-    register_cmd_sensor();
     register_cmd_ota();
+#if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
+    register_cmd_wifi();
+#endif
 
 #if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
     esp_console_dev_usb_serial_jtag_config_t hw_config =

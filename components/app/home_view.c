@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "chart_controller.h"
+#include "device_status.h"
 #include "input_handler.h"
 #include "port_adc.h"
 #include "temp_sampler.h"
@@ -57,7 +58,7 @@ void home_view_update_main_info(void)
         return;
     }
 
-    char buf[140] = "";
+    char buf[512] = "";
     if (*s_cfg.overall_info_page == 1) {
         uint32_t active_s = input_handler_get_active_sample_period_ms() / 1000;
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Sample period: %lu", active_s);
@@ -75,14 +76,8 @@ void home_view_update_main_info(void)
         } else {
             snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: --°C\nHum: --%%");
         }
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSIZE: %u", (unsigned)(strlen(buf) + 9));
     } else {
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "KEYS:");
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nBOOT: more detail");
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nBOOT DOUBLE: home");
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPOWER: next page");
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPOWER LONG: power off");
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPOWER DOUBLE: show chart");
+        device_status_format_system_info(buf, sizeof(buf));
     }
 
     lv_label_set_text(s_cfg.ui->label_home_main_info, buf);
