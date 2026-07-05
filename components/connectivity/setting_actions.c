@@ -58,8 +58,6 @@ static void ntp_sync_task(void *arg)
     esp_err_t err = ntp_sync_rtc();
     if (err == ESP_OK) {
         ntp_format_rtc_time(s_status_msg, sizeof(s_status_msg));
-    } else if (err == ESP_ERR_WIFI_NOT_CONNECT) {
-        set_status("NTP: no WiFi");
     } else {
         set_status("NTP: failed");
     }
@@ -86,12 +84,7 @@ static void run_wifi_connect(void)
 
 static void run_ntp_sync(void)
 {
-    if (s_wifi_busy || s_ntp_busy || ota_ui_is_running()) {
-        return;
-    }
-
-    if (!wifi_is_connected()) {
-        set_status("NTP: need WiFi");
+    if (s_ntp_busy || ota_ui_is_running()) {
         return;
     }
 

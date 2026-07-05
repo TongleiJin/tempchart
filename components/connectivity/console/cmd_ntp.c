@@ -11,11 +11,9 @@
 #include "esp_console.h"
 #include "esp_log.h"
 #include "esp_netif_sntp.h"
-#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "port_rtc.h"
-#include "cmd_wifi_conn.h"
 
 static const char *TAG = "cmd_ntp";
 
@@ -48,10 +46,6 @@ static esp_err_t sync_time_from_network(struct tm *out_local_time)
 
 esp_err_t ntp_sync_rtc(void)
 {
-    if (!wifi_is_connected()) {
-        return ESP_ERR_WIFI_NOT_CONNECT;
-    }
-
     if (!PortRtc_IsReady()) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -120,11 +114,6 @@ static int cmd_ntp_handler(int argc, char **argv)
     if (strcmp(argv[1], "sync") != 0) {
         printf("Unknown subcommand '%s'\n", argv[1]);
         printf("Usage: ntp sync | ntp show\n");
-        return 1;
-    }
-
-    if (!wifi_is_connected()) {
-        printf("Wi-Fi not connected. Run: wifi connect <ssid> [password]\n");
         return 1;
     }
 
