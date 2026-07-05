@@ -404,13 +404,13 @@ static int cmd_ota_url_handler(int argc, char **argv)
 
     if (strcmp(argv[1], "clear") == 0) {
         if (ota_url_clear() != ESP_OK) {
-            printf("Failed to clear OTA URL\n");
+            printf("Failed to reset OTA URL in NVS\n");
             return 1;
         }
 
         char url[OTA_URL_MAX_LEN];
         ota_url_get(url, sizeof(url));
-        printf("OTA URL reset to default: %s\n", url);
+        printf("OTA URL reset in NVS: %s\n", url);
         return 0;
     }
 

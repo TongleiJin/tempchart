@@ -20,6 +20,7 @@
 #include "chart_controller.h"
 #include "input_handler.h"
 #include "home_view.h"
+#include "ota_url_store.h"
 #include "port_codec.h"
 
 #define TAG "app"
@@ -92,6 +93,8 @@ static void temp_update_timer_cb(lv_timer_t *timer)
 
 void UserApp_Init()
 {
+    ESP_ERROR_CHECK(ota_url_store_init());
+
     audio_data_ptr = (uint8_t *)heap_caps_malloc(102400, MALLOC_CAP_SPIRAM);
     assert(audio_data_ptr);
     BoardPower_Init();

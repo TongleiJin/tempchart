@@ -13,11 +13,11 @@ menu "App Configuration"
             GAP device name advertised over BLE (NimBLE bleprph style).
 
     config APP_OTA_FIRMWARE_URL
-        string "OTA firmware HTTPS URL (default)"
+        string "OTA firmware HTTPS URL (factory default for NVS seed)"
         default "https://192.168.1.100:8070/tempchart.bin"
         help
-            Default OTA URL when NVS has no saved value.
-            Use the same CA cert as server_certs/ca_cert.pem for HTTPS.
+            Written to NVS on first boot when no OTA URL is stored yet.
+            Use the console command ota_url set to change the NVS value.
 
     config APP_OTA_SERVER_PORT
         int "OTA server port"

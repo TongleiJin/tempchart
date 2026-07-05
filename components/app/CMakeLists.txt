@@ -18,4 +18,5 @@ idf_component_register(
     waveshare__pcf85063a
     esp_wifi
     esp_netif
+    ota_url
 )

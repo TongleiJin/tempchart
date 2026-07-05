@@ -58,7 +58,7 @@ void home_view_update_main_info(void)
         return;
     }
 
-    char buf[256] = "";
+    char buf[512] = "";
     if (*s_cfg.overall_info_page == 1) {
         uint32_t active_s = input_handler_get_active_sample_period_ms() / 1000;
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Sample period: %lu", active_s);
