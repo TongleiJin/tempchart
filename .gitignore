@@ -54,3 +54,6 @@ __pycache__/
 *~
 DHTC12-manual.pdf
 
+# tools: only track Python scripts
+tools/*
+!tools/*.py
