@@ -18,6 +18,11 @@
 #define TAG "input"
 
 #define SETTING_MODE_CONFIG_MAX SETTING_MODE_SENSOR_SRC
+#define TOUCH_DEBOUNCE_MS         30
+#define TOUCH_COOLDOWN_MS         300
+#define TOUCH_RELEASE_TIMEOUT_MS  1000
+#define TOUCH_RELEASE_POLL_MS     20
+#define TOUCH_QUEUE_LEN           8
 
 static Button *s_boot_button = nullptr;
 static Button *s_power_button = nullptr;
@@ -37,6 +42,96 @@ static size_t s_temp_period_active_index = 0;
 static size_t s_chart_points_selected_index = 0;
 static size_t s_chart_points_active_index = 0;
 static size_t s_temp_sensor_source_selected_index = 0;
+static TickType_t s_touch_last_accept_tick = 0;
+
+static void touch_drain_pending_events(void)
+{
+    uint32_t io_num;
+    while (xQueueReceive(s_gpio_evt_queue, &io_num, 0)) {
+    }
+}
+
+static bool touch_cooldown_elapsed(void)
+{
+    if (s_touch_last_accept_tick == 0) {
+        return true;
+    }
+
+    TickType_t elapsed = xTaskGetTickCount() - s_touch_last_accept_tick;
+    return elapsed >= pdMS_TO_TICKS(TOUCH_COOLDOWN_MS);
+}
+
+static bool touch_read_stable_point(uint16_t *x, uint16_t *y)
+{
+    if (!s_cfg.touch_dev) {
+        return false;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(TOUCH_DEBOUNCE_MS));
+
+    if (!s_cfg.touch_dev->GetTouchPoint(x, y)) {
+        return false;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    uint16_t x2 = 0;
+    uint16_t y2 = 0;
+    if (!s_cfg.touch_dev->GetTouchPoint(&x2, &y2)) {
+        return false;
+    }
+
+    *x = x2;
+    *y = y2;
+    return true;
+}
+
+static void touch_wait_release(void)
+{
+    if (!s_cfg.touch_dev) {
+        return;
+    }
+
+    const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(TOUCH_RELEASE_TIMEOUT_MS);
+    uint16_t x = 0;
+    uint16_t y = 0;
+
+    while (xTaskGetTickCount() < deadline) {
+        if (!s_cfg.touch_dev->GetTouchPoint(&x, &y)) {
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(TOUCH_RELEASE_POLL_MS));
+    }
+}
+
+static void touch_handle_point(uint16_t x, uint16_t y)
+{
+    if (x < 80 && y < 80) {
+        ESP_LOGD(TAG, "Touch NEXT at (%u,%u)", x, y);
+        if (Lvgl_lock(portMAX_DELAY)) {
+            touch_on_next();
+            Lvgl_unlock();
+        }
+    } else if (x >= 119 && x < 199 && y < 80) {
+        ESP_LOGD(TAG, "Touch GO at (%u,%u)", x, y);
+        if (Lvgl_lock(portMAX_DELAY)) {
+            touch_on_active_button();
+            Lvgl_unlock();
+        }
+    } else if (x < 80 && y >= 118 && y < 198) {
+        ESP_LOGD(TAG, "Touch MORE at (%u,%u)", x, y);
+        if (Lvgl_lock(portMAX_DELAY)) {
+            touch_on_more_button();
+            Lvgl_unlock();
+        }
+    } else if (x >= 119 && x < 199 && y >= 118 && y < 198) {
+        ESP_LOGD(TAG, "Touch CANCEL at (%u,%u)", x, y);
+        if (Lvgl_lock(portMAX_DELAY)) {
+            touch_on_cancel_button();
+            Lvgl_unlock();
+        }
+    }
+}
 
 static void touch_on_next(void);
 static void touch_on_active_button(void);
@@ -292,7 +387,7 @@ void input_handler_touch_gpio_init(void)
     gpio_config(&io_conf);
     gpio_install_isr_service(0);
     gpio_isr_handler_add(EPD_TP_INT_PIN, gpio_isr_handler, (void *)EPD_TP_INT_PIN);
-    s_gpio_evt_queue = xQueueCreate(3, sizeof(uint32_t));
+    s_gpio_evt_queue = xQueueCreate(TOUCH_QUEUE_LEN, sizeof(uint32_t));
 }
 
 void input_handler_bind(const input_handler_config_t *config)
@@ -416,45 +511,27 @@ static void task_touch_loop(void *arg)
             continue;
         }
 
+        touch_drain_pending_events();
+
+        if (!touch_cooldown_elapsed()) {
+            touch_wait_release();
+            continue;
+        }
+
         if (!s_cfg.ui || lv_obj_has_flag(s_cfg.ui->container_setting, LV_OBJ_FLAG_HIDDEN)) {
-            ESP_LOGI(TAG, "touched");
+            touch_wait_release();
             continue;
         }
 
-        if (!s_cfg.touch_dev) {
+        uint16_t x = 0;
+        uint16_t y = 0;
+        if (!touch_read_stable_point(&x, &y)) {
             continue;
         }
 
-        uint16_t x, y;
-        if (!s_cfg.touch_dev->GetTouchPoint(&x, &y)) {
-            continue;
-        }
-
-        if (x < 80 && y < 80) {
-            ESP_LOGI(TAG, "Touch button event: NEXT clicked at (%d,%d)", x, y);
-            if (Lvgl_lock(portMAX_DELAY)) {
-                touch_on_next();
-                Lvgl_unlock();
-            }
-        } else if (x >= 119 && x < 199 && y < 80) {
-            ESP_LOGI(TAG, "Touch button event: GO clicked at (%d,%d)", x, y);
-            if (Lvgl_lock(portMAX_DELAY)) {
-                touch_on_active_button();
-                Lvgl_unlock();
-            }
-        } else if (x < 80 && y >= 118 && y < 198) {
-            ESP_LOGI(TAG, "Touch button event: MORE clicked at (%d,%d)", x, y);
-            if (Lvgl_lock(portMAX_DELAY)) {
-                touch_on_more_button();
-                Lvgl_unlock();
-            }
-        } else if (x >= 119 && x < 199 && y >= 118 && y < 198) {
-            ESP_LOGI(TAG, "Touch button event: CANCEL clicked at (%d,%d)", x, y);
-            if (Lvgl_lock(portMAX_DELAY)) {
-                touch_on_cancel_button();
-                Lvgl_unlock();
-            }
-        }
+        touch_handle_point(x, y);
+        s_touch_last_accept_tick = xTaskGetTickCount();
+        touch_wait_release();
     }
 }
 
