@@ -54,13 +54,57 @@ esp_err_t wifi_stack_init(void)
                                                &wifi_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                                &wifi_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_FLASH));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 
     s_wifi_stack_ready = true;
     ESP_LOGI(TAG, "Wi-Fi stack ready (STA mode)");
     return ESP_OK;
+}
+
+bool wifi_is_connected(void)
+{
+    wifi_ap_record_t ap_info;
+    return esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK;
+}
+
+bool wifi_connect_stored(int timeout_ms)
+{
+    wifi_config_t wifi_config = { 0 };
+    if (esp_wifi_get_config(WIFI_IF_STA, &wifi_config) != ESP_OK ||
+        wifi_config.sta.ssid[0] == '\0') {
+        ESP_LOGW(TAG, "No Wi-Fi credentials in NVS");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Connecting to stored SSID '%s'...", wifi_config.sta.ssid);
+    xEventGroupClearBits(s_wifi_event_group, CONNECTED_BIT);
+    esp_err_t err = esp_wifi_connect();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_wifi_connect failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    int bits = xEventGroupWaitBits(s_wifi_event_group, CONNECTED_BIT,
+                                   pdFALSE, pdTRUE,
+                                   timeout_ms / portTICK_PERIOD_MS);
+    return (bits & CONNECTED_BIT) != 0;
+}
+
+void wifi_format_status(char *buf, size_t len)
+{
+    if (buf == NULL || len == 0) {
+        return;
+    }
+
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
+        snprintf(buf, len, "WiFi: offline");
+        return;
+    }
+
+    snprintf(buf, len, "WiFi: %s %ddBm", (const char *)ap_info.ssid, ap_info.rssi);
 }
 
 static bool wifi_connect_to(const char *ssid, const char *pass, int timeout_ms)

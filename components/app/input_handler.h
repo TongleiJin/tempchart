@@ -39,6 +39,7 @@ void input_handler_setup_buttons(gpio_num_t boot_pin, gpio_num_t pwr_pin, EventG
 void input_handler_touch_gpio_init(void);
 void input_handler_bind(const input_handler_config_t *config);
 void input_handler_refresh_setting_label(void);
+void input_handler_poll_setting_label(void);
 uint32_t input_handler_get_active_sample_period_ms(void);
 void input_handler_start_tasks(TaskHandle_t *key_task, TaskHandle_t *touch_task);
 void input_handler_stop_tasks(void);
