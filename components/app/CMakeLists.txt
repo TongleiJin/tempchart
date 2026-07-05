@@ -8,7 +8,7 @@ idf_component_register(
     "home_view.c"
     "device_status.c"
   INCLUDE_DIRS "."
-  REQUIRES esp_timer firmware_version
+  REQUIRES esp_timer firmware_version ota_url
   PRIV_REQUIRES
     port_bsp
     ui
@@ -18,5 +18,4 @@ idf_component_register(
     waveshare__pcf85063a
     esp_wifi
     esp_netif
-    ota_url
 )

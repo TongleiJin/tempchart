@@ -4,6 +4,10 @@
 
 #include "esp_err.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define OTA_URL_MAX_LEN 256
 
 /** Init NVS OTA URL namespace; seed default URL on first boot. */
@@ -20,3 +24,7 @@ esp_err_t ota_url_set_host(const char *host);
 
 /** Reset OTA URL in NVS to the factory default. */
 esp_err_t ota_url_clear(void);
+
+#ifdef __cplusplus
+}
+#endif

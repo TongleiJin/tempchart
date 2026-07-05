@@ -1,6 +1,5 @@
 #include "device_status.h"
 
-#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -23,11 +22,7 @@ void device_status_format_system_info(char *buf, size_t size)
              "\nBuild: %s", firmware_build_month_day_hour());
 
     wifi_ap_record_t ap_info;
-    bool wifi_connected = (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
-    snprintf(buf + strlen(buf), size - strlen(buf),
-             "\nSta  : %s", wifi_connected ? "connected" : "disconnected");
-
-    if (wifi_connected) {
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
         snprintf(buf + strlen(buf), size - strlen(buf),
                  "\nWiFi : %s\nRSSI : %d dBm",
                  (const char *)ap_info.ssid, ap_info.rssi);
@@ -49,13 +44,6 @@ void device_status_format_system_info(char *buf, size_t size)
 
     snprintf(buf + strlen(buf), size - strlen(buf),
              "\nBLE  : %s", CONFIG_APP_BLE_DEVICE_NAME);
-
-    uint8_t mac[6];
-    if (esp_wifi_get_mac(WIFI_IF_STA, mac) == ESP_OK) {
-        snprintf(buf + strlen(buf), size - strlen(buf),
-                 "\nMAC  : %02X:%02X:%02X:%02X:%02X:%02X",
-                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    }
 
     char ota_url[OTA_URL_MAX_LEN];
     if (ota_url_get(ota_url, sizeof(ota_url)) == ESP_OK) {

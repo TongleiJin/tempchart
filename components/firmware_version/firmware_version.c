@@ -32,7 +32,7 @@ static int parse_month_from_date(const char *date)
 
 const char *firmware_build_month_day_hour(void)
 {
-    static char s_buf[12];
+    static char s_buf[14];
     static bool s_initialized;
 
     if (!s_initialized) {
@@ -41,10 +41,11 @@ const char *firmware_build_month_day_hour(void)
         int month = parse_month_from_date(date);
         int day = 0;
         int hour = 0;
+        int minute = 0;
 
         sscanf(date + 4, "%d", &day);
-        sscanf(time, "%d", &hour);
-        snprintf(s_buf, sizeof(s_buf), "%02d-%02d %02d", month, day, hour);
+        sscanf(time, "%d:%d", &hour, &minute);
+        snprintf(s_buf, sizeof(s_buf), "%02d-%02d %02d:%02d", month, day, hour, minute);
         s_initialized = true;
     }
 
