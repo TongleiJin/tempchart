@@ -13,8 +13,11 @@
 #include "port_lvgl.h"
 #include "port_power.h"
 #include "temp_sampler.h"
+#include "setting_actions_iface.h"
 
 #define TAG "input"
+
+#define SETTING_MODE_CONFIG_MAX SETTING_MODE_SENSOR_SRC
 
 static Button *s_boot_button = nullptr;
 static Button *s_power_button = nullptr;
@@ -49,6 +52,72 @@ static void task_key_loop(void *arg);
 static void task_touch_loop(void *arg);
 static void gpio_isr_handler(void *arg);
 
+static void setting_format_label(char *buf, size_t len)
+{
+    const setting_actions_ops_t *ops = setting_actions_get();
+    if (ops && ops->format_mode_label && s_setting_target_id >= SETTING_MODE_WIFI) {
+        ops->format_mode_label(s_setting_target_id, buf, len);
+        return;
+    }
+
+    if (s_setting_target_id == SETTING_MODE_SAMPLE_INTV) {
+        uint32_t selected = s_temp_period_list[s_temp_period_selected_index] / 1000;
+        snprintf(buf, len, "Sample Intv Sel:%lu", selected);
+    } else if (s_setting_target_id == SETTING_MODE_CHART_POINTS) {
+        snprintf(buf, len, "Chart Point Sel:%lu", s_chart_point_list[s_chart_points_selected_index]);
+    } else {
+        snprintf(buf, len, "Sensor Src Sel:%s",
+                 temp_sampler_get_sensor_source_name(s_temp_sensor_source_selected_index));
+    }
+}
+
+static bool setting_is_action_mode(void)
+{
+    return s_setting_target_id > SETTING_MODE_CONFIG_MAX;
+}
+
+static void setting_run_action(void)
+{
+    const setting_actions_ops_t *ops = setting_actions_get();
+    if (!ops || !s_cfg.ui) {
+        return;
+    }
+
+    char buf[80];
+    switch (s_setting_target_id) {
+    case SETTING_MODE_WIFI:
+        if (ops->run_wifi_connect) {
+            ops->run_wifi_connect();
+        }
+        break;
+    case SETTING_MODE_NTP:
+        if (ops->run_ntp_sync) {
+            ops->run_ntp_sync();
+        }
+        break;
+    case SETTING_MODE_OTA:
+        if (ops->run_ota) {
+            ops->run_ota();
+        }
+        break;
+    case SETTING_MODE_RESTART:
+        if (ops->run_reboot) {
+            ops->run_reboot();
+        }
+        return;
+    case SETTING_MODE_EPD_REINIT:
+        if (ops->run_epd_reinit) {
+            ops->run_epd_reinit();
+        }
+        break;
+    default:
+        return;
+    }
+
+    setting_format_label(buf, sizeof(buf));
+    lv_label_set_text(s_cfg.ui->label_touch_event, buf);
+}
+
 static void touch_on_next(void)
 {
     if (!s_cfg.ui) {
@@ -56,11 +125,17 @@ static void touch_on_next(void)
     }
 
     char buf[80] = "default";
-    if (s_setting_target_id == 0) {
+    if (setting_is_action_mode()) {
+        setting_format_label(buf, sizeof(buf));
+        lv_label_set_text(s_cfg.ui->label_touch_event, buf);
+        return;
+    }
+
+    if (s_setting_target_id == SETTING_MODE_SAMPLE_INTV) {
         s_temp_period_selected_index = (s_temp_period_selected_index + 1) % s_temp_period_count;
         uint32_t selected = s_temp_period_list[s_temp_period_selected_index] / 1000;
         snprintf(buf, sizeof(buf), "Sample Intv Sel:%lu", selected);
-    } else if (s_setting_target_id == 1) {
+    } else if (s_setting_target_id == SETTING_MODE_CHART_POINTS) {
         s_chart_points_selected_index = (s_chart_points_selected_index + 1) % s_chart_point_count;
         snprintf(buf, sizeof(buf), "Chart Point Sel:%lu", s_chart_point_list[s_chart_points_selected_index]);
     } else {
@@ -78,12 +153,17 @@ static void touch_on_active_button(void)
         return;
     }
 
-    if (s_setting_target_id == 0) {
+    if (setting_is_action_mode()) {
+        setting_run_action();
+        return;
+    }
+
+    if (s_setting_target_id == SETTING_MODE_SAMPLE_INTV) {
         s_temp_period_active_index = s_temp_period_selected_index;
         if (s_cfg.set_sample_timer_period) {
             s_cfg.set_sample_timer_period(s_temp_period_list[s_temp_period_active_index]);
         }
-    } else if (s_setting_target_id == 1) {
+    } else if (s_setting_target_id == SETTING_MODE_CHART_POINTS) {
         s_chart_points_active_index = s_chart_points_selected_index;
         chart_controller_set_point_count(s_chart_point_list[s_chart_points_active_index]);
     } else {
@@ -100,11 +180,17 @@ static void touch_on_cancel_button(void)
     }
 
     char buf[80] = "default";
-    if (s_setting_target_id == 0) {
+    if (setting_is_action_mode()) {
+        setting_format_label(buf, sizeof(buf));
+        lv_label_set_text(s_cfg.ui->label_touch_event, buf);
+        return;
+    }
+
+    if (s_setting_target_id == SETTING_MODE_SAMPLE_INTV) {
         s_temp_period_selected_index = s_temp_period_active_index;
         uint32_t selected = s_temp_period_list[s_temp_period_selected_index] / 1000;
         snprintf(buf, sizeof(buf), "Sample Intv | Sel:%lu", selected);
-    } else if (s_setting_target_id == 1) {
+    } else if (s_setting_target_id == SETTING_MODE_CHART_POINTS) {
         s_chart_points_selected_index = s_chart_points_active_index;
         snprintf(buf, sizeof(buf), "Chart Point | Sel:%lu", s_chart_point_list[s_chart_points_selected_index]);
     } else {
@@ -122,21 +208,9 @@ static void touch_on_more_button(void)
     }
 
     char buf[80];
-    if (s_setting_target_id == 0) {
-        s_setting_target_id = 1;
-        snprintf(buf, sizeof(buf), "Chart Point Mode:%lu", s_chart_point_list[s_chart_points_selected_index]);
-        lv_label_set_text(s_cfg.ui->label_touch_event, buf);
-    } else if (s_setting_target_id == 1) {
-        s_setting_target_id = 2;
-        snprintf(buf, sizeof(buf), "Sensor Src Mode:%s",
-                 temp_sampler_get_sensor_source_name(s_temp_sensor_source_selected_index));
-        lv_label_set_text(s_cfg.ui->label_touch_event, buf);
-    } else {
-        s_setting_target_id = 0;
-        uint32_t selected = s_temp_period_list[s_temp_period_selected_index] / 1000;
-        snprintf(buf, sizeof(buf), "Sample Intv Mode:%lu", selected);
-        lv_label_set_text(s_cfg.ui->label_touch_event, buf);
-    }
+    s_setting_target_id = (s_setting_target_id + 1) % SETTING_MODE_COUNT;
+    setting_format_label(buf, sizeof(buf));
+    lv_label_set_text(s_cfg.ui->label_touch_event, buf);
 }
 
 void input_handler_refresh_setting_label(void)
@@ -146,15 +220,27 @@ void input_handler_refresh_setting_label(void)
     }
 
     char buf[80];
-    if (s_setting_target_id == 0) {
-        uint32_t selected = s_temp_period_list[s_temp_period_selected_index] / 1000;
-        snprintf(buf, sizeof(buf), "Sample Intv Sel:%lu", selected);
-    } else if (s_setting_target_id == 1) {
-        snprintf(buf, sizeof(buf), "Chart Point Sel:%lu", s_chart_point_list[s_chart_points_selected_index]);
-    } else {
-        snprintf(buf, sizeof(buf), "Sensor Src Sel:%s",
-                 temp_sampler_get_sensor_source_name(s_temp_sensor_source_selected_index));
+    setting_format_label(buf, sizeof(buf));
+    lv_label_set_text(s_cfg.ui->label_touch_event, buf);
+}
+
+void input_handler_poll_setting_label(void)
+{
+    const setting_actions_ops_t *ops = setting_actions_get();
+    if (!s_cfg.ui || !s_cfg.ui->label_touch_event || lv_obj_has_flag(s_cfg.ui->container_setting, LV_OBJ_FLAG_HIDDEN)) {
+        return;
     }
+
+    if (ops && ops->poll) {
+        ops->poll();
+    }
+
+    if (!setting_is_action_mode()) {
+        return;
+    }
+
+    char buf[80];
+    setting_format_label(buf, sizeof(buf));
     lv_label_set_text(s_cfg.ui->label_touch_event, buf);
 }
 

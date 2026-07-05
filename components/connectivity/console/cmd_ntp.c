@@ -15,14 +15,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "port_rtc.h"
+#include "cmd_wifi_conn.h"
 
 static const char *TAG = "cmd_ntp";
-
-static bool wifi_is_connected(void)
-{
-    wifi_ap_record_t ap_info;
-    return esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK;
-}
 
 static esp_err_t sync_time_from_network(struct tm *out_local_time)
 {
@@ -49,6 +44,45 @@ static esp_err_t sync_time_from_network(struct tm *out_local_time)
 
     esp_netif_sntp_deinit();
     return ESP_OK;
+}
+
+esp_err_t ntp_sync_rtc(void)
+{
+    if (!wifi_is_connected()) {
+        return ESP_ERR_WIFI_NOT_CONNECT;
+    }
+
+    if (!PortRtc_IsReady()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    struct tm network_time = {};
+    esp_err_t ret = sync_time_from_network(&network_time);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    return PortRtc_SetLocalTime(&network_time);
+}
+
+void ntp_format_rtc_time(char *buf, size_t len)
+{
+    if (buf == NULL || len == 0) {
+        return;
+    }
+
+    if (!PortRtc_IsReady()) {
+        snprintf(buf, len, "RTC: N/A");
+        return;
+    }
+
+    struct tm rtc_time = {};
+    if (PortRtc_GetLocalTime(&rtc_time) != ESP_OK) {
+        snprintf(buf, len, "RTC: err");
+        return;
+    }
+
+    strftime(buf, len, "RTC:%m-%d %H:%M:%S", &rtc_time);
 }
 
 static void print_local_time(const char *label, const struct tm *time)

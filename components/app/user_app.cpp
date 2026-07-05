@@ -341,6 +341,11 @@ void Task_lvgl_loop(void *arg)
             home_view_update_main_info();
         }
 
+        if (!lv_obj_has_flag(scr_ui.container_setting, LV_OBJ_FLAG_HIDDEN))
+        {
+            input_handler_poll_setting_label();
+        }
+
         Lvgl_unlock();
     }
 }

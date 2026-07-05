@@ -7,6 +7,7 @@ idf_component_register(
     "input_handler.cpp"
     "home_view.c"
     "device_status.c"
+    "setting_actions_iface.c"
   INCLUDE_DIRS "."
   REQUIRES esp_timer firmware_version ota_url
   PRIV_REQUIRES

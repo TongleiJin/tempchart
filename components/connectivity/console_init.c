@@ -17,6 +17,7 @@
 #include "cmd_ping.h"
 #include "cmd_ntp.h"
 #include "cmd_version.h"
+#include "setting_actions.h"
 
 static const char *TAG = "console";
 #define PROMPT_STR "smart_tempchart"
@@ -90,5 +91,6 @@ void Console_Init(void)
 #endif
 
     ESP_LOGI(TAG, "Console ready. Type 'help' for commands.");
+    setting_actions_init();
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
 }

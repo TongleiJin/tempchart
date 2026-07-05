@@ -331,3 +331,10 @@ void PortLvgl_Start_Init() {
     EPD_DisplayPartBaseImage();
     EPD_Init_Partial();            //局部刷新初始化
 }
+
+void PortDisplay_Reinit() {
+    EPD_Init();
+    EPD_Clear();
+    EPD_DisplayPartBaseImage();
+    EPD_Init_Partial();
+}
