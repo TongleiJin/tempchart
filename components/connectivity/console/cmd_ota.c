@@ -23,6 +23,7 @@
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
 #include "ota_url_store.h"
+#include "app_version.h"
 #include "port_lvgl.h"
 #include "user_app.h"
 #include "ble_app.h"
@@ -45,44 +46,11 @@ static void ota_log_heap(const char *label)
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
 
-static bool ota_parse_host_port(const char *url, char *host, size_t host_len, int *port)
-{
-    const char *p = url;
-    if (strncmp(p, "https://", 8) == 0) {
-        p += 8;
-    } else if (strncmp(p, "http://", 7) == 0) {
-        p += 7;
-    }
-
-    const char *slash = strchr(p, '/');
-    const char *colon = strchr(p, ':');
-    size_t len;
-
-    if (colon != NULL && (slash == NULL || colon < slash)) {
-        len = (size_t)(colon - p);
-        if (len == 0 || len >= host_len) {
-            return false;
-        }
-        memcpy(host, p, len);
-        host[len] = '\0';
-        *port = atoi(colon + 1);
-    } else {
-        len = slash ? (size_t)(slash - p) : strlen(p);
-        if (len == 0 || len >= host_len) {
-            return false;
-        }
-        memcpy(host, p, len);
-        host[len] = '\0';
-        *port = 443;
-    }
-    return *port > 0;
-}
-
 static bool ota_tcp_probe(const char *url)
 {
     char host[64];
     int port = 0;
-    if (!ota_parse_host_port(url, host, sizeof(host), &port)) {
+    if (!ota_url_parse_host_port(url, host, sizeof(host), &port)) {
         printf("OTA URL parse failed\n");
         return false;
     }
@@ -214,11 +182,23 @@ static void ota_task(void *param)
                     memcpy(&new_app_info,
                            &ota_buf[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)],
                            sizeof(esp_app_desc_t));
-                    ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
+                    ESP_LOGI(TAG, "New firmware version: %s (code %lu)",
+                             new_app_info.version,
+                             (unsigned long)app_version_code_from_string(new_app_info.version));
 
                     esp_app_desc_t running_app_info;
                     if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
-                        ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
+                        ESP_LOGI(TAG, "Running firmware version: %s (code %lu)",
+                                 running_app_info.version,
+                                 (unsigned long)app_version_code_from_string(running_app_info.version));
+
+                        if (app_version_compare_strings(new_app_info.version, running_app_info.version) <= 0) {
+                            ESP_LOGW(TAG, "Skip OTA: new firmware is not newer than running");
+                            printf("OTA skipped: %s is not newer than running %s\n",
+                                   new_app_info.version, running_app_info.version);
+                            ota_http_cleanup(client);
+                            goto done;
+                        }
                     }
 
                     err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);

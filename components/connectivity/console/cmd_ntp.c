@@ -11,18 +11,12 @@
 #include "esp_console.h"
 #include "esp_log.h"
 #include "esp_netif_sntp.h"
-#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "port_rtc.h"
+#include "wifi_status.h"
 
 static const char *TAG = "cmd_ntp";
-
-static bool wifi_is_connected(void)
-{
-    wifi_ap_record_t ap_info;
-    return esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK;
-}
 
 static esp_err_t sync_time_from_network(struct tm *out_local_time)
 {
@@ -89,7 +83,7 @@ static int cmd_ntp_handler(int argc, char **argv)
         return 1;
     }
 
-    if (!wifi_is_connected()) {
+    if (!wifi_sta_is_connected()) {
         printf("Wi-Fi not connected. Run: wifi connect <ssid> [password]\n");
         return 1;
     }

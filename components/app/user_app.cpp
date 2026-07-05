@@ -16,11 +16,22 @@
 #include "port_lvgl.h"
 #include "port_adc.h"
 #include "esp_timer.h"
+<<<<<<< HEAD
 #include "temp_sampler.h"
 #include "chart_controller.h"
 #include "input_handler.h"
 #include "home_view.h"
 #include "port_codec.h"
+=======
+#include "user_data_type.h"
+#include "lite_fifo.h"
+#include "port_display.h"
+#include "esp_app_desc.h"
+#include "esp_ota_ops.h"
+#include "ota_url_store.h"
+#include "wifi_status.h"
+#include "app_version.h"
+>>>>>>> d1bbfd2 (display about on home 2nd page)
 
 #define TAG "app"
 
@@ -168,7 +179,73 @@ static void show_container(int container_number)
 
 static void app_show_container(int container_number)
 {
+<<<<<<< HEAD
     show_container(container_number);
+=======
+    char buf[256] = "";
+    if (overallInfoPageNumber == 1)
+    {
+        uint32_t active_s = temp_period_list[temp_period_active_index] / 1000;
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Sample period: %lu", active_s);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sample_count);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset: %u", TEMP_OFFSET);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp scaler: %u", TEMP_SCALER);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nChart size: %lu", lv_chart_get_point_count(scr_ui.temp_chart));
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSensor Src: %s", temp_sensor_source_list[temp_sensor_source_active_index]);
+
+        float t = 0.0f;
+        float h = 0.0f;
+        if (read_temp_humidity(&t, &h))
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: %.1f°C\nHum: %.1f%%", t, h);
+        }
+        else
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: --°C\nHum: --%%");
+        }
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSIZE: %u", strlen(buf)+9);
+    }
+    else
+    {
+        const esp_app_desc_t *app = esp_app_get_description();
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Ver: %s (%lu)",
+                 app->version, (unsigned long)app_version_code());
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nBuild: %s %s", app->date, app->time);
+
+        wifi_sta_status_t wifi;
+        if (wifi_sta_get_status(&wifi))
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nWiFi: %s", wifi.ssid);
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nIP: %s", wifi.ip[0] != '\0' ? wifi.ip : "--");
+        }
+        else
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nWiFi: --");
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nIP: --");
+        }
+
+        char ota_url[OTA_URL_MAX_LEN];
+        char ota_host[64];
+        int ota_port = 0;
+        if (ota_url_get(ota_url, sizeof(ota_url)) == ESP_OK &&
+            ota_url_parse_host_port(ota_url, ota_host, sizeof(ota_host), &ota_port))
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nOTA: %s:%d", ota_host, ota_port);
+        }
+        else
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nOTA: --");
+        }
+
+        const esp_partition_t *running = esp_ota_get_running_partition();
+        if (running != NULL)
+        {
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nPart: %s", running->label);
+        }
+    }
+
+    lv_label_set_text(scr_ui.label_home_main_info, buf);
+>>>>>>> d1bbfd2 (display about on home 2nd page)
 }
 
 static void app_power_off(void)
