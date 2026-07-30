@@ -80,30 +80,38 @@ esp_err_t ota_url_store_init(void)
     }
 
     nvs_handle_t handle;
-    err = nvs_open_ota(&handle, NVS_READONLY);
+    err = nvs_open_ota(&handle, NVS_READWRITE);
     if (err != ESP_OK) {
         return err;
     }
 
     size_t required = 0;
     err = nvs_get_str(handle, NVS_KEY_URL, NULL, &required);
-    nvs_close(handle);
-
     if (err == ESP_OK) {
+        nvs_close(handle);
         return ESP_OK;
     }
+
     if (err != ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
         return err;
     }
 
     char url[OTA_URL_MAX_LEN];
     err = build_default_url(url, sizeof(url));
     if (err != ESP_OK) {
+        nvs_close(handle);
         return err;
     }
 
     ESP_LOGI(TAG, "Seeding default OTA URL to NVS: %s", url);
-    return ota_url_set(url);
+    err = nvs_set_str(handle, NVS_KEY_URL, url);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+
+    return err;
 }
 
 esp_err_t ota_url_get(char *buf, size_t len)

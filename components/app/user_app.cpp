@@ -4,6 +4,7 @@
 #include <driver/gpio.h>
 #include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <esp_err.h>
 #include "user_app.h"
 #include "port_power.h"
 #include "port_ft6336.h"
@@ -93,7 +94,10 @@ static void temp_update_timer_cb(lv_timer_t *timer)
 
 void UserApp_Init()
 {
-    ESP_ERROR_CHECK(ota_url_store_init());
+    esp_err_t ota_err = ota_url_store_init();
+    if (ota_err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA URL store init failed: %s", esp_err_to_name(ota_err));
+    }
 
     audio_data_ptr = (uint8_t *)heap_caps_malloc(102400, MALLOC_CAP_SPIRAM);
     assert(audio_data_ptr);

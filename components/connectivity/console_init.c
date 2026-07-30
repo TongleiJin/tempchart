@@ -1,6 +1,7 @@
 #include "console_init.h"
 
 #include "esp_console.h"
+#include "esp_err.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -46,7 +47,10 @@ void Console_Init(void)
     repl_config.max_cmdline_length = CONFIG_CONSOLE_MAX_COMMAND_LINE_LENGTH;
 
     initialize_nvs();
-    ESP_ERROR_CHECK(ota_url_store_init());
+    esp_err_t ota_err = ota_url_store_init();
+    if (ota_err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA URL store init failed: %s", esp_err_to_name(ota_err));
+    }
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 #if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
