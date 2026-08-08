@@ -13,32 +13,32 @@
 #include "chart_controller.h"
 #include "port_rtc.h"
 
-void device_status_format_system_info1(char *buf, size_t size)
+void device_status_page2(char *buf, size_t size)
 {
     buf[0] = '\0';
     uint32_t active_s = input_handler_get_active_sample_period_ms() / 1000;
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Sample period: %lu", active_s);
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sampler_get_count());
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset: %u", chart_controller_get_temp_offset());
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp scaler: %u", chart_controller_get_temp_scaler());
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nChart size: %lu", chart_controller_get_point_count());
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSensor Src: %s",
+    snprintf(buf + strlen(buf), size - strlen(buf), "Sample period: %lu", active_s);
+    snprintf(buf + strlen(buf), size - strlen(buf), "\nCount: %lu", temp_sampler_get_count());
+    snprintf(buf + strlen(buf), size - strlen(buf), "\nTemp offset: %u", chart_controller_get_temp_offset());
+    snprintf(buf + strlen(buf), size - strlen(buf), "\nTemp scaler: %u", chart_controller_get_temp_scaler());
+    snprintf(buf + strlen(buf), size - strlen(buf), "\nChart size: %lu", chart_controller_get_point_count());
+    snprintf(buf + strlen(buf), size - strlen(buf), "\nSensor Src: %s",
              temp_sampler_get_sensor_source_name(temp_sampler_get_sensor_source()));
 
     float t = 0.0f;
     float h = 0.0f;
     if (temp_sampler_read(&t, &h))
     {
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: %.1f°C\nHum: %.1f%%", t, h);
+        snprintf(buf + strlen(buf), size - strlen(buf), "\nTemp: %.1f°C\nHum: %.1f%%", t, h);
     }
     else
     {
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: --°C\nHum: --%%");
+        snprintf(buf + strlen(buf), size - strlen(buf), "\nTemp: --°C\nHum: --%%");
     }
 }
 
 
-void device_status_format_system_info(char *buf, size_t size)
+void device_status_page1(char *buf, size_t size)
 {
     struct tm rtc_time = {};
 
@@ -50,16 +50,12 @@ void device_status_format_system_info(char *buf, size_t size)
     buf[0] = '\0';
     PortRtc_GetLocalTime(&rtc_time);
 
-    snprintf(buf, size, "Ver  : %s", firmware_version);
     // append current date
-    snprintf(buf + strlen(buf), size - strlen(buf),
-             "\nDate : %02d-%02d-%04d", rtc_time.tm_mon + 1, rtc_time.tm_mday, rtc_time.tm_year + 1900);
+    snprintf(buf + strlen(buf), size - strlen(buf), "Date : %02d-%02d-%04d", rtc_time.tm_mon + 1, rtc_time.tm_mday, rtc_time.tm_year + 1900);
     // append current time
-    snprintf(buf + strlen(buf), size - strlen(buf),
-             "\nTime : %02d:%02d:%02d", rtc_time.tm_hour, rtc_time.tm_min, rtc_time.tm_sec);
-
-    snprintf(buf + strlen(buf), size - strlen(buf),
-             "\nBuild: %s", firmware_build_month_day_hour());
+    snprintf(buf + strlen(buf), size - strlen(buf), "\nTime : %02d:%02d:%02d", rtc_time.tm_hour, rtc_time.tm_min, rtc_time.tm_sec);
+    snprintf(buf + strlen(buf), size - strlen(buf), "\nVer  : %s", firmware_version);
+    snprintf(buf + strlen(buf), size - strlen(buf), "\nBuild: %s", firmware_build_month_day_hour());
 
     wifi_ap_record_t ap_info;
     if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK)
