@@ -64,14 +64,18 @@ static void ping_on_end(esp_ping_handle_t hdl, void *args)
     esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
     esp_ping_get_profile(hdl, ESP_PING_PROF_DURATION, &total_time_ms, sizeof(total_time_ms));
 
-    if (transmitted > 0) {
+    if (transmitted > 0)
+    {
         loss = (uint32_t)((1.0f - ((float)received / (float)transmitted)) * 100.0f);
-    } else {
+    }
+    else
+    {
         loss = 0;
     }
 
 #ifdef CONFIG_LWIP_IPV4
-    if (IP_IS_V4(&target_addr)) {
+    if (IP_IS_V4(&target_addr))
+    {
         printf("\n--- %s ping statistics ---\n", inet_ntoa(*ip_2_ip4(&target_addr)));
     }
 #endif
@@ -84,7 +88,8 @@ static void ping_on_end(esp_ping_handle_t hdl, void *args)
 
 static bool ping_resolve_host(const char *host, ip_addr_t *target_addr)
 {
-    if (ipaddr_aton(host, target_addr)) {
+    if (ipaddr_aton(host, target_addr))
+    {
         return true;
     }
 
@@ -93,12 +98,14 @@ static bool ping_resolve_host(const char *host, ip_addr_t *target_addr)
 
     memset(&hint, 0, sizeof(hint));
     hint.ai_family = AF_INET;
-    if (getaddrinfo(host, NULL, &hint, &res) != 0 || res == NULL) {
+    if (getaddrinfo(host, NULL, &hint, &res) != 0 || res == NULL)
+    {
         return false;
     }
 
 #ifdef CONFIG_LWIP_IPV4
-    if (res->ai_family == AF_INET) {
+    if (res->ai_family == AF_INET)
+    {
         struct in_addr addr4 = ((struct sockaddr_in *)res->ai_addr)->sin_addr;
         inet_addr_to_ip4addr(ip_2_ip4(target_addr), &addr4);
         freeaddrinfo(res);
@@ -112,34 +119,40 @@ static bool ping_resolve_host(const char *host, ip_addr_t *target_addr)
 
 static int cmd_ping_handler(int argc, char **argv)
 {
-    if (argc < 2) {
+    if (argc < 2)
+    {
         printf("Usage: ping <host> [count]\n");
         return 1;
     }
 
-    if (s_ping != NULL) {
+    if (s_ping != NULL)
+    {
         printf("Ping already running\n");
         return 1;
     }
 
     wifi_ap_record_t ap_info;
-    if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
+    if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK)
+    {
         printf("Wi-Fi not connected. Run: wifi connect <ssid> [password]\n");
         return 1;
     }
 
     ip_addr_t target_addr;
     memset(&target_addr, 0, sizeof(target_addr));
-    if (!ping_resolve_host(argv[1], &target_addr)) {
+    if (!ping_resolve_host(argv[1], &target_addr))
+    {
         printf("ping: unknown host %s\n", argv[1]);
         return 1;
     }
 
     esp_ping_config_t config = ESP_PING_DEFAULT_CONFIG();
     config.target_addr = target_addr;
-    if (argc >= 3) {
+    if (argc >= 3)
+    {
         int count = atoi(argv[2]);
-        if (count <= 0) {
+        if (count <= 0)
+        {
             printf("Invalid count: %s\n", argv[2]);
             return 1;
         }
@@ -153,13 +166,15 @@ static int cmd_ping_handler(int argc, char **argv)
         .on_ping_end = ping_on_end,
     };
 
-    if (esp_ping_new_session(&config, &cbs, &s_ping) != ESP_OK) {
+    if (esp_ping_new_session(&config, &cbs, &s_ping) != ESP_OK)
+    {
         ESP_LOGE(TAG, "esp_ping_new_session failed");
         s_ping = NULL;
         return 1;
     }
 
-    if (esp_ping_start(s_ping) != ESP_OK) {
+    if (esp_ping_start(s_ping) != ESP_OK)
+    {
         ESP_LOGE(TAG, "esp_ping_start failed");
         esp_ping_delete_session(s_ping);
         s_ping = NULL;

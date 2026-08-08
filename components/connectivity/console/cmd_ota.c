@@ -67,9 +67,12 @@ static void ota_log_heap(const char *label)
 static bool ota_parse_host_port(const char *url, char *host, size_t host_len, int *port)
 {
     const char *p = url;
-    if (strncmp(p, "https://", 8) == 0) {
+    if (strncmp(p, "https://", 8) == 0)
+    {
         p += 8;
-    } else if (strncmp(p, "http://", 7) == 0) {
+    }
+    else if (strncmp(p, "http://", 7) == 0)
+    {
         p += 7;
     }
 
@@ -77,17 +80,22 @@ static bool ota_parse_host_port(const char *url, char *host, size_t host_len, in
     const char *colon = strchr(p, ':');
     size_t len;
 
-    if (colon != NULL && (slash == NULL || colon < slash)) {
+    if (colon != NULL && (slash == NULL || colon < slash))
+    {
         len = (size_t)(colon - p);
-        if (len == 0 || len >= host_len) {
+        if (len == 0 || len >= host_len)
+        {
             return false;
         }
         memcpy(host, p, len);
         host[len] = '\0';
         *port = atoi(colon + 1);
-    } else {
+    }
+    else
+    {
         len = slash ? (size_t)(slash - p) : strlen(p);
-        if (len == 0 || len >= host_len) {
+        if (len == 0 || len >= host_len)
+        {
             return false;
         }
         memcpy(host, p, len);
@@ -101,7 +109,8 @@ static bool ota_tcp_probe(const char *url)
 {
     char host[64];
     int port = 0;
-    if (!ota_parse_host_port(url, host, sizeof(host), &port)) {
+    if (!ota_parse_host_port(url, host, sizeof(host), &port))
+    {
         printf("OTA URL parse failed\n");
         return false;
     }
@@ -113,19 +122,21 @@ static bool ota_tcp_probe(const char *url)
 
     char port_str[8];
     snprintf(port_str, sizeof(port_str), "%d", port);
-    if (getaddrinfo(host, port_str, &hints, &res) != 0 || res == NULL) {
+    if (getaddrinfo(host, port_str, &hints, &res) != 0 || res == NULL)
+    {
         printf("TCP probe: cannot resolve %s\n", host);
         return false;
     }
 
     int sock = socket(res->ai_family, res->ai_socktype, 0);
-    if (sock < 0) {
+    if (sock < 0)
+    {
         freeaddrinfo(res);
         printf("TCP probe: socket create failed\n");
         return false;
     }
 
-    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+    struct timeval tv = {.tv_sec = 5, .tv_usec = 0};
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
@@ -133,7 +144,8 @@ static bool ota_tcp_probe(const char *url)
     close(sock);
     freeaddrinfo(res);
 
-    if (ret != 0) {
+    if (ret != 0)
+    {
         printf("TCP probe failed: cannot reach %s:%d\n", host, port);
         printf("Check: PC server running, same Wi-Fi, firewall port %d, AP isolation\n", port);
         return false;
@@ -175,7 +187,8 @@ static void ota_task(void *param)
     const esp_partition_t *running = esp_ota_get_running_partition();
     bool ui_mode = s_ota_ui_mode;
 
-    if (ota_buf == NULL) {
+    if (ota_buf == NULL)
+    {
         ESP_LOGE(TAG, "OTA buffer alloc failed");
         ota_set_state(OTA_UI_FAILED);
         goto done;
@@ -196,14 +209,16 @@ static void ota_task(void *param)
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL) {
+    if (client == NULL)
+    {
         ESP_LOGE(TAG, "HTTP client init failed");
         ota_set_state(OTA_UI_FAILED);
         goto done;
     }
 
     err = esp_http_client_open(client, 0);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "HTTP open failed: %s", esp_err_to_name(err));
         ota_http_cleanup(client);
         ota_set_state(OTA_UI_FAILED);
@@ -213,7 +228,8 @@ static void ota_task(void *param)
     ota_set_progress(0, esp_http_client_get_content_length(client));
 
     update_partition = esp_ota_get_next_update_partition(NULL);
-    if (update_partition == NULL) {
+    if (update_partition == NULL)
+    {
         ESP_LOGE(TAG, "No OTA partition found");
         ota_http_cleanup(client);
         ota_set_state(OTA_UI_FAILED);
@@ -225,39 +241,48 @@ static void ota_task(void *param)
     int binary_file_length = 0;
     bool image_header_checked = false;
 
-    while (1) {
+    while (1)
+    {
         int data_read = esp_http_client_read(client, ota_buf, OTA_BUF_SIZE);
-        if (data_read < 0) {
+        if (data_read < 0)
+        {
             ESP_LOGE(TAG, "SSL read error, errno=%d", errno);
             ota_http_cleanup(client);
             esp_ota_abort(update_handle);
             ota_set_state(OTA_UI_FAILED);
             goto done;
         }
-        if (data_read > 0) {
-            if (!image_header_checked) {
+        if (data_read > 0)
+        {
+            if (!image_header_checked)
+            {
                 esp_app_desc_t new_app_info;
                 if (data_read > (int)(sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) +
-                                      sizeof(esp_app_desc_t))) {
+                                      sizeof(esp_app_desc_t)))
+                {
                     memcpy(&new_app_info,
                            &ota_buf[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)],
                            sizeof(esp_app_desc_t));
                     ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
 
                     esp_app_desc_t running_app_info;
-                    if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
+                    if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
+                    {
                         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
                     }
 
                     err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
-                    if (err != ESP_OK) {
+                    if (err != ESP_OK)
+                    {
                         ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
                         ota_http_cleanup(client);
                         ota_set_state(OTA_UI_FAILED);
                         goto done;
                     }
                     image_header_checked = true;
-                } else {
+                }
+                else
+                {
                     ESP_LOGE(TAG, "First packet too small");
                     ota_http_cleanup(client);
                     ota_set_state(OTA_UI_FAILED);
@@ -266,7 +291,8 @@ static void ota_task(void *param)
             }
 
             err = esp_ota_write(update_handle, ota_buf, data_read);
-            if (err != ESP_OK) {
+            if (err != ESP_OK)
+            {
                 ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
                 ota_http_cleanup(client);
                 esp_ota_abort(update_handle);
@@ -275,14 +301,19 @@ static void ota_task(void *param)
             }
             binary_file_length += data_read;
             ota_set_progress(binary_file_length, s_ota_status.content_length);
-            if ((binary_file_length % (256 * 1024)) < OTA_BUF_SIZE) {
+            if ((binary_file_length % (256 * 1024)) < OTA_BUF_SIZE)
+            {
                 ESP_LOGI(TAG, "Downloaded %d bytes...", binary_file_length);
             }
-        } else if (data_read == 0) {
-            if (errno == ECONNRESET || errno == ENOTCONN) {
+        }
+        else if (data_read == 0)
+        {
+            if (errno == ECONNRESET || errno == ENOTCONN)
+            {
                 break;
             }
-            if (esp_http_client_is_complete_data_received(client)) {
+            if (esp_http_client_is_complete_data_received(client))
+            {
                 break;
             }
         }
@@ -290,7 +321,8 @@ static void ota_task(void *param)
 
     ESP_LOGI(TAG, "Downloaded %d bytes", binary_file_length);
 
-    if (esp_http_client_is_complete_data_received(client) != true) {
+    if (esp_http_client_is_complete_data_received(client) != true)
+    {
         ESP_LOGE(TAG, "Incomplete download");
         ota_http_cleanup(client);
         esp_ota_abort(update_handle);
@@ -300,7 +332,8 @@ static void ota_task(void *param)
 
     ota_set_state(OTA_UI_VERIFYING);
     err = esp_ota_end(update_handle);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
         ota_http_cleanup(client);
         ota_set_state(OTA_UI_FAILED);
@@ -308,7 +341,8 @@ static void ota_task(void *param)
     }
 
     err = esp_ota_set_boot_partition(update_partition);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
         ota_http_cleanup(client);
         ota_set_state(OTA_UI_FAILED);
@@ -319,14 +353,16 @@ static void ota_task(void *param)
     ota_set_state(OTA_UI_SUCCESS);
     ESP_LOGI(TAG, "OTA success, restarting...");
 
-    if (ui_mode) {
+    if (ui_mode)
+    {
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
     ota_shutdown_subsystems();
     esp_restart();
 
 done:
-    if (s_ota_status.state != OTA_UI_SUCCESS) {
+    if (s_ota_status.state != OTA_UI_SUCCESS)
+    {
         printf("OTA failed. Reboot device to restore BLE and UI.\n");
     }
     heap_caps_free(ota_buf);
@@ -337,21 +373,25 @@ done:
 
 static bool ota_start_common(bool ui_mode)
 {
-    if (s_ota_running) {
+    if (s_ota_running)
+    {
         return false;
     }
 
-    if (!wifi_is_connected()) {
+    if (!wifi_is_connected())
+    {
         return false;
     }
 
     char url[OTA_URL_MAX_LEN];
-    if (ota_url_get(url, sizeof(url)) != ESP_OK) {
+    if (ota_url_get(url, sizeof(url)) != ESP_OK)
+    {
         return false;
     }
 
     char *url_copy = strdup(url);
-    if (url_copy == NULL) {
+    if (url_copy == NULL)
+    {
         return false;
     }
 
@@ -363,18 +403,21 @@ static bool ota_start_common(bool ui_mode)
 
     ota_prepare_network();
     ota_set_state(OTA_UI_PROBING);
-    if (!ota_tcp_probe(url_copy)) {
+    if (!ota_tcp_probe(url_copy))
+    {
         free(url_copy);
         s_ota_running = false;
         ota_set_state(OTA_UI_FAILED);
         return false;
     }
 
-    if (!ui_mode) {
+    if (!ui_mode)
+    {
         ota_shutdown_subsystems();
     }
 
-    if (xTaskCreate(ota_task, "ota_task", 12288, url_copy, 5, NULL) != pdPASS) {
+    if (xTaskCreate(ota_task, "ota_task", 12288, url_copy, 5, NULL) != pdPASS)
+    {
         free(url_copy);
         s_ota_running = false;
         ota_set_state(OTA_UI_IDLE);
@@ -391,7 +434,8 @@ bool ota_ui_is_running(void)
 
 void ota_ui_get_status(ota_ui_status_t *out)
 {
-    if (out == NULL) {
+    if (out == NULL)
+    {
         return;
     }
     *out = s_ota_status;
@@ -399,11 +443,13 @@ void ota_ui_get_status(ota_ui_status_t *out)
 
 void ota_ui_format_status(char *buf, size_t len)
 {
-    if (buf == NULL || len == 0) {
+    if (buf == NULL || len == 0)
+    {
         return;
     }
 
-    switch (s_ota_status.state) {
+    switch (s_ota_status.state)
+    {
     case OTA_UI_IDLE:
         snprintf(buf, len, "OTA: GO to start");
         break;
@@ -414,10 +460,13 @@ void ota_ui_format_status(char *buf, size_t len)
         snprintf(buf, len, "OTA: probing srv...");
         break;
     case OTA_UI_DOWNLOADING:
-        if (s_ota_status.content_length > 0) {
+        if (s_ota_status.content_length > 0)
+        {
             int pct = (s_ota_status.progress_bytes * 100) / s_ota_status.content_length;
             snprintf(buf, len, "OTA: %d%% (%dKB)", pct, s_ota_status.progress_bytes / 1024);
-        } else {
+        }
+        else
+        {
             snprintf(buf, len, "OTA: %dKB...", s_ota_status.progress_bytes / 1024);
         }
         break;
@@ -441,12 +490,14 @@ void ota_ui_format_status(char *buf, size_t len)
 
 void ota_ui_poll(void)
 {
-    if (!s_ota_running || s_ota_status.state != OTA_UI_DOWNLOADING) {
+    if (!s_ota_running || s_ota_status.state != OTA_UI_DOWNLOADING)
+    {
         return;
     }
 
     int64_t now = esp_timer_get_time();
-    if ((now - s_ota_last_progress_us) > ((int64_t)OTA_STUCK_TIMEOUT_MS * 1000)) {
+    if ((now - s_ota_last_progress_us) > ((int64_t)OTA_STUCK_TIMEOUT_MS * 1000))
+    {
         ota_set_state(OTA_UI_STUCK);
     }
 }
@@ -458,25 +509,30 @@ bool ota_ui_start(void)
 
 bool ota_console_start(void)
 {
-    if (s_ota_running) {
+    if (s_ota_running)
+    {
         printf("OTA already running\n");
         return false;
     }
 
-    if (!wifi_is_connected()) {
+    if (!wifi_is_connected())
+    {
         printf("Wi-Fi not connected. Run: wifi connect <ssid> <password>\n");
         return false;
     }
 
     char url[OTA_URL_MAX_LEN];
-    if (ota_url_get(url, sizeof(url)) != ESP_OK) {
+    if (ota_url_get(url, sizeof(url)) != ESP_OK)
+    {
         printf("Failed to read OTA URL\n");
         return false;
     }
 
     printf("Starting OTA from: %s\n", url);
-    if (!ota_start_common(false)) {
-        if (s_ota_status.state == OTA_UI_FAILED) {
+    if (!ota_start_common(false))
+    {
+        if (s_ota_status.state == OTA_UI_FAILED)
+        {
             printf("OTA pre-check failed\n");
         }
         return false;
@@ -500,20 +556,26 @@ static int cmd_ota_info(int argc, char **argv)
     const esp_partition_t *next = esp_ota_get_next_update_partition(NULL);
     esp_app_desc_t app_info;
 
-    if (esp_ota_get_partition_description(running, &app_info) == ESP_OK) {
+    if (esp_ota_get_partition_description(running, &app_info) == ESP_OK)
+    {
         printf("Running : %s v%s\n", app_info.project_name, firmware_version);
     }
-    if (running) {
+    if (running)
+    {
         printf("Partition: %s @ 0x%lx\n", running->label, (unsigned long)running->address);
     }
-    if (next) {
+    if (next)
+    {
         printf("Next OTA : %s @ 0x%lx\n", next->label, (unsigned long)next->address);
     }
 
     char url[OTA_URL_MAX_LEN];
-    if (ota_url_get(url, sizeof(url)) == ESP_OK) {
+    if (ota_url_get(url, sizeof(url)) == ESP_OK)
+    {
         printf("OTA URL  : %s\n", url);
-    } else {
+    }
+    else
+    {
         printf("OTA URL  : (unavailable)\n");
     }
     return 0;
@@ -521,7 +583,8 @@ static int cmd_ota_info(int argc, char **argv)
 
 static int cmd_ota_url_handler(int argc, char **argv)
 {
-    if (argc < 2) {
+    if (argc < 2)
+    {
         printf("Usage:\n");
         printf("  ota_url get\n");
         printf("  ota_url set <ip_or_host>\n");
@@ -529,9 +592,11 @@ static int cmd_ota_url_handler(int argc, char **argv)
         return 1;
     }
 
-    if (strcmp(argv[1], "get") == 0) {
+    if (strcmp(argv[1], "get") == 0)
+    {
         char url[OTA_URL_MAX_LEN];
-        if (ota_url_get(url, sizeof(url)) != ESP_OK) {
+        if (ota_url_get(url, sizeof(url)) != ESP_OK)
+        {
             printf("Failed to read OTA URL\n");
             return 1;
         }
@@ -539,13 +604,16 @@ static int cmd_ota_url_handler(int argc, char **argv)
         return 0;
     }
 
-    if (strcmp(argv[1], "set") == 0) {
-        if (argc < 3) {
+    if (strcmp(argv[1], "set") == 0)
+    {
+        if (argc < 3)
+        {
             printf("Usage: ota_url set <ip_or_host>\n");
             return 1;
         }
 
-        if (ota_url_set_host(argv[2]) != ESP_OK) {
+        if (ota_url_set_host(argv[2]) != ESP_OK)
+        {
             printf("Failed to save OTA URL\n");
             return 1;
         }
@@ -556,8 +624,10 @@ static int cmd_ota_url_handler(int argc, char **argv)
         return 0;
     }
 
-    if (strcmp(argv[1], "clear") == 0) {
-        if (ota_url_clear() != ESP_OK) {
+    if (strcmp(argv[1], "clear") == 0)
+    {
+        if (ota_url_clear() != ESP_OK)
+        {
             printf("Failed to reset OTA URL in NVS\n");
             return 1;
         }

@@ -12,7 +12,8 @@
 #include "port_sht31.h"
 #include "port_shtc3.h"
 
-static SemaphoreHandle_t s_read_mutex = NULL;static liteFifo_t s_fifo;
+static SemaphoreHandle_t s_read_mutex = NULL;
+static liteFifo_t s_fifo;
 static uint32_t s_sample_count = 0;
 static float s_max_temp = 0.0f;
 static float s_min_temp = 100.0f;
@@ -24,11 +25,13 @@ static const size_t s_sensor_source_count =
 
 static bool read_temp_humidity_locked(float *temperature, float *humidity)
 {
-    if (!temperature || !humidity || !s_read_mutex) {
+    if (!temperature || !humidity || !s_read_mutex)
+    {
         return false;
     }
 
-    if (xSemaphoreTake(s_read_mutex, portMAX_DELAY) != pdTRUE) {
+    if (xSemaphoreTake(s_read_mutex, portMAX_DELAY) != pdTRUE)
+    {
         return false;
     }
 
@@ -36,13 +39,17 @@ static bool read_temp_humidity_locked(float *temperature, float *humidity)
     float t = -1000.0f;
     float h = -1000.0f;
 
-    if (s_sensor_source_index == 1) {
+    if (s_sensor_source_index == 1)
+    {
         Sht31_ReadTempHumi(&t, &h);
-    } else {
+    }
+    else
+    {
         Shtc3_ReadTempHumi(&t, &h);
     }
 
-    if (t != -1000.0f && h != -1000.0f) {
+    if (t != -1000.0f && h != -1000.0f)
+    {
         success = true;
         *temperature = t;
         *humidity = h;
@@ -74,7 +81,8 @@ bool temp_sampler_read(float *temperature, float *humidity)
 
 void temp_sampler_push(float temperature, const pcf85063a_datetime_t *timestamp)
 {
-    if (!timestamp) {
+    if (!timestamp)
+    {
         return;
     }
 
@@ -86,17 +94,20 @@ void temp_sampler_push(float temperature, const pcf85063a_datetime_t *timestamp)
     fifo_PushData(&s_fifo, sample, true);
     s_sample_count++;
 
-    if (temperature > s_max_temp) {
+    if (temperature > s_max_temp)
+    {
         s_max_temp = temperature;
     }
-    if (temperature < s_min_temp) {
+    if (temperature < s_min_temp)
+    {
         s_min_temp = temperature;
     }
 }
 
 void temp_sampler_copy_samples(temp_sample_t *buf, uint16_t len)
 {
-    if (!buf) {
+    if (!buf)
+    {
         return;
     }
     fifo_CopyData(&s_fifo, buf, len);
@@ -124,7 +135,8 @@ size_t temp_sampler_get_sensor_source(void)
 
 void temp_sampler_set_sensor_source(size_t index)
 {
-    if (index < s_sensor_source_count) {
+    if (index < s_sensor_source_count)
+    {
         s_sensor_source_index = index;
     }
 }
@@ -136,7 +148,8 @@ size_t temp_sampler_get_sensor_source_count(void)
 
 const char *temp_sampler_get_sensor_source_name(size_t index)
 {
-    if (index >= s_sensor_source_count) {
+    if (index >= s_sensor_source_count)
+    {
         return "";
     }
     return s_sensor_source_list[index];

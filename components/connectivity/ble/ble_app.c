@@ -39,14 +39,17 @@ static void ble_tick_notify_task(void *param)
 {
     (void)param;
 
-    for (;;) {
+    for (;;)
+    {
         vTaskDelay(pdMS_TO_TICKS(BLE_TICK_NOTIFY_INTERVAL_MS));
 
-        if (s_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+        if (s_conn_handle == BLE_HS_CONN_HANDLE_NONE)
+        {
             continue;
         }
 
-        if (!gatt_svr_tick_notify_enabled()) {
+        if (!gatt_svr_tick_notify_enabled())
+        {
             continue;
         }
 
@@ -73,14 +76,14 @@ static void ble_advertise(void)
     fields.name_len = strlen(name);
     fields.name_is_complete = 1;
 
-    fields.uuids16 = (ble_uuid16_t[]) {
-        BLE_UUID16_INIT(GATT_SVR_SVC_UUID16)
-    };
+    fields.uuids16 = (ble_uuid16_t[]){
+        BLE_UUID16_INIT(GATT_SVR_SVC_UUID16)};
     fields.num_uuids16 = 1;
     fields.uuids16_is_complete = 1;
 
     rc = ble_gap_adv_set_fields(&fields);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "adv set fields failed: %d", rc);
         return;
     }
@@ -91,7 +94,8 @@ static void ble_advertise(void)
 
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
                            &adv_params, ble_gap_event, NULL);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "adv start failed: %d", rc);
     }
 }
@@ -100,14 +104,18 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
 {
     (void)arg;
 
-    switch (event->type) {
+    switch (event->type)
+    {
     case BLE_GAP_EVENT_CONNECT:
         ESP_LOGI(TAG, "connection %s; status=%d",
                  event->connect.status == 0 ? "established" : "failed",
                  event->connect.status);
-        if (event->connect.status == 0) {
+        if (event->connect.status == 0)
+        {
             s_conn_handle = event->connect.conn_handle;
-        } else {
+        }
+        else
+        {
             ble_advertise();
         }
         return 0;
@@ -120,7 +128,8 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
-        if (event->subscribe.attr_handle == gatt_svr_tick_chr_val_handle()) {
+        if (event->subscribe.attr_handle == gatt_svr_tick_chr_val_handle())
+        {
             gatt_svr_tick_notify_set(event->subscribe.cur_notify);
             ESP_LOGI(TAG, "tick notify %s",
                      event->subscribe.cur_notify ? "enabled" : "disabled");
@@ -147,7 +156,8 @@ static void ble_on_sync(void)
     assert(rc == 0);
 
     rc = ble_hs_id_infer_auto(0, &own_addr_type);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "infer addr type failed: %d", rc);
         return;
     }
@@ -170,7 +180,8 @@ static void ble_host_task(void *param)
 esp_err_t ble_app_init(void)
 {
     esp_err_t ret = nimble_port_init();
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         return ret;
     }
 
@@ -181,13 +192,15 @@ esp_err_t ble_app_init(void)
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
 
     int rc = gatt_svr_init();
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "gatt_svr_init failed: %d", rc);
         return ESP_FAIL;
     }
 
     rc = ble_svc_gap_device_name_set(CONFIG_APP_BLE_DEVICE_NAME);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGE(TAG, "set device name failed: %d", rc);
         return ESP_FAIL;
     }
@@ -195,7 +208,8 @@ esp_err_t ble_app_init(void)
     ble_store_config_init();
     nimble_port_freertos_init(ble_host_task);
 
-    if (s_tick_notify_task == NULL) {
+    if (s_tick_notify_task == NULL)
+    {
         xTaskCreate(ble_tick_notify_task, "ble_tick_notify", 3072, NULL, 5,
                     &s_tick_notify_task);
     }
@@ -208,18 +222,21 @@ esp_err_t ble_app_shutdown_for_ota(void)
 {
     ESP_LOGI(TAG, "Stopping BLE for OTA...");
 
-    if (s_tick_notify_task != NULL) {
+    if (s_tick_notify_task != NULL)
+    {
         vTaskDelete(s_tick_notify_task);
         s_tick_notify_task = NULL;
     }
 
     int rc = nimble_port_stop();
-    if (rc != 0) {
+    if (rc != 0)
+    {
         ESP_LOGW(TAG, "nimble_port_stop returned %d", rc);
     }
 
     esp_err_t ret = nimble_port_deinit();
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGW(TAG, "nimble_port_deinit: %s", esp_err_to_name(ret));
     }
 

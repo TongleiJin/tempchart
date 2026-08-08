@@ -59,11 +59,13 @@ bool UserApp_ReadTempHumidity(float *temperature, float *humidity)
 
 void UserApp_GetTimeStr(char *buf, size_t len)
 {
-    if (!buf || len == 0) {
+    if (!buf || len == 0)
+    {
         return;
     }
 
-    if (pcf85063initflag) {
+    if (pcf85063initflag)
+    {
         pcf85063a_datetime_t current_time = {};
         pcf85063a_get_time_date(&pcf85063, &current_time);
         snprintf(buf, len, "%02d:%02d:%02d",
@@ -73,7 +75,6 @@ void UserApp_GetTimeStr(char *buf, size_t len)
 
     snprintf(buf, len, "--:--:--");
 }
-
 
 static void temp_update_timer_cb(lv_timer_t *timer)
 {
@@ -90,12 +91,11 @@ static void temp_update_timer_cb(lv_timer_t *timer)
     temp_sampler_push(t, &current_time);
 }
 
-
-
 void UserApp_Init()
 {
     esp_err_t ota_err = ota_url_store_init();
-    if (ota_err != ESP_OK) {
+    if (ota_err != ESP_OK)
+    {
         ESP_LOGE(TAG, "OTA URL store init failed: %s", esp_err_to_name(ota_err));
     }
 
@@ -172,13 +172,10 @@ static void show_container(int container_number)
     }
 }
 
-
 static void app_show_container(int container_number)
 {
     show_container(container_number);
 }
-
-
 
 static void app_power_off(void)
 {
@@ -213,7 +210,8 @@ static void app_power_off(void)
 
 static void app_set_sample_period(uint32_t period_ms)
 {
-    if (temp_timer) {
+    if (temp_timer)
+    {
         lv_timer_set_period(temp_timer, period_ms);
     }
 }
@@ -271,7 +269,8 @@ void UserApp_ShutdownForOta(void)
 {
     ESP_LOGI(TAG, "Stopping app tasks for OTA...");
 
-    if (temp_timer != NULL) {
+    if (temp_timer != NULL)
+    {
         lv_timer_delete(temp_timer);
         temp_timer = NULL;
     }
@@ -280,16 +279,19 @@ void UserApp_ShutdownForOta(void)
     s_key_task = NULL;
     s_touch_task = NULL;
 
-    if (s_lvgl_loop_task != NULL) {
+    if (s_lvgl_loop_task != NULL)
+    {
         vTaskDelete(s_lvgl_loop_task);
         s_lvgl_loop_task = NULL;
     }
-    if (s_led_task != NULL) {
+    if (s_led_task != NULL)
+    {
         vTaskDelete(s_led_task);
         s_led_task = NULL;
     }
 
-    if (audio_data_ptr != NULL) {
+    if (audio_data_ptr != NULL)
+    {
         heap_caps_free(audio_data_ptr);
         audio_data_ptr = NULL;
     }
@@ -319,7 +321,6 @@ void Task_led_loop(void *arg)
         }
     }
 }
-    
 
 void Task_lvgl_loop(void *arg)
 {

@@ -53,7 +53,6 @@ void register_system_common(void)
     register_log_level();
 }
 
-
 /* 'version' command */
 static int get_version(int argc, char **argv)
 {
@@ -62,37 +61,39 @@ static int get_version(int argc, char **argv)
     uint32_t flash_size;
     esp_chip_info(&info);
 
-    switch(info.model) {
-        case CHIP_ESP32:
-            model = "ESP32";
-            break;
-        case CHIP_ESP32S2:
-            model = "ESP32-S2";
-            break;
-        case CHIP_ESP32S3:
-            model = "ESP32-S3";
-            break;
-        case CHIP_ESP32C3:
-            model = "ESP32-C3";
-            break;
-        case CHIP_ESP32H2:
-            model = "ESP32-H2";
-            break;
-        case CHIP_ESP32C2:
-            model = "ESP32-C2";
-            break;
-        case CHIP_ESP32P4:
-            model = "ESP32-P4";
-            break;
-        case CHIP_ESP32C5:
-            model = "ESP32-C5";
-            break;
-        default:
-            model = "Unknown";
-            break;
+    switch (info.model)
+    {
+    case CHIP_ESP32:
+        model = "ESP32";
+        break;
+    case CHIP_ESP32S2:
+        model = "ESP32-S2";
+        break;
+    case CHIP_ESP32S3:
+        model = "ESP32-S3";
+        break;
+    case CHIP_ESP32C3:
+        model = "ESP32-C3";
+        break;
+    case CHIP_ESP32H2:
+        model = "ESP32-H2";
+        break;
+    case CHIP_ESP32C2:
+        model = "ESP32-C2";
+        break;
+    case CHIP_ESP32P4:
+        model = "ESP32-P4";
+        break;
+    case CHIP_ESP32C5:
+        model = "ESP32-C5";
+        break;
+    default:
+        model = "Unknown";
+        break;
     }
 
-    if(esp_flash_get_size(NULL, &flash_size) != ESP_OK) {
+    if (esp_flash_get_size(NULL, &flash_size) != ESP_OK)
+    {
         printf("Get flash size failed");
         return 1;
     }
@@ -100,7 +101,7 @@ static int get_version(int argc, char **argv)
     printf("Chip info:\r\n");
     printf("\tmodel:%s\r\n", model);
     printf("\tcores:%d\r\n", info.cores);
-    printf("\tfeature:%s%s%s%s%"PRIu32"%s\r\n",
+    printf("\tfeature:%s%s%s%s%" PRIu32 "%s\r\n",
            info.features & CHIP_FEATURE_WIFI_BGN ? "/802.11bgn" : "",
            info.features & CHIP_FEATURE_BLE ? "/BLE" : "",
            info.features & CHIP_FEATURE_BT ? "/BT" : "",
@@ -118,7 +119,7 @@ static void register_version(void)
         .hint = NULL,
         .func = &get_version,
     };
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
 
 /** 'restart' command restarts the program */
@@ -137,14 +138,14 @@ static void register_restart(void)
         .hint = NULL,
         .func = &restart,
     };
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
 
 /** 'free' command prints available heap memory */
 
 static int free_mem(int argc, char **argv)
 {
-    printf("Free22: %"PRIu32"\n", esp_get_free_heap_size());
+    printf("Free22: %" PRIu32 "\n", esp_get_free_heap_size());
     return 0;
 }
 
@@ -156,14 +157,14 @@ static void register_free(void)
         .hint = NULL,
         .func = &free_mem,
     };
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
 
 /* 'heap' command prints minimum heap size */
 static int heap_size(int argc, char **argv)
 {
     uint32_t heap_size = heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT);
-    printf("min heap size: %"PRIu32"\n", heap_size);
+    printf("min heap size: %" PRIu32 "\n", heap_size);
     return 0;
 }
 
@@ -175,8 +176,7 @@ static void register_heap(void)
         .hint = NULL,
         .func = &heap_size,
     };
-    ESP_ERROR_CHECK( esp_console_cmd_register(&heap_cmd) );
-
+    ESP_ERROR_CHECK(esp_console_cmd_register(&heap_cmd));
 }
 
 /** 'tasks' command prints the list of tasks and related information */
@@ -186,7 +186,8 @@ static int tasks_info(int argc, char **argv)
 {
     const size_t bytes_per_task = 40; /* see vTaskList description */
     char *task_list_buffer = malloc(uxTaskGetNumberOfTasks() * bytes_per_task);
-    if (task_list_buffer == NULL) {
+    if (task_list_buffer == NULL)
+    {
         ESP_LOGE(TAG, "failed to allocate buffer for vTaskList output");
         return 1;
     }
@@ -209,51 +210,56 @@ static void register_tasks(void)
         .hint = NULL,
         .func = &tasks_info,
     };
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
 
 #endif // WITH_TASKS_INFO
 
 /** log_level command changes log level via esp_log_level_set */
 
-static struct {
+static struct
+{
     struct arg_str *tag;
     struct arg_str *level;
     struct arg_end *end;
 } log_level_args;
 
-static const char* s_log_level_names[] = {
+static const char *s_log_level_names[] = {
     "none",
     "error",
     "warn",
     "info",
     "debug",
-    "verbose"
-};
+    "verbose"};
 
 static int log_level(int argc, char **argv)
 {
-    int nerrors = arg_parse(argc, argv, (void **) &log_level_args);
-    if (nerrors != 0) {
+    int nerrors = arg_parse(argc, argv, (void **)&log_level_args);
+    if (nerrors != 0)
+    {
         arg_print_errors(stderr, log_level_args.end, argv[0]);
         return 1;
     }
     assert(log_level_args.tag->count == 1);
     assert(log_level_args.level->count == 1);
-    const char* tag = log_level_args.tag->sval[0];
-    const char* level_str = log_level_args.level->sval[0];
+    const char *tag = log_level_args.tag->sval[0];
+    const char *level_str = log_level_args.level->sval[0];
     esp_log_level_t level;
     size_t level_len = strlen(level_str);
-    for (level = ESP_LOG_NONE; level <= ESP_LOG_VERBOSE; level++) {
-        if (memcmp(level_str, s_log_level_names[level], level_len) == 0) {
+    for (level = ESP_LOG_NONE; level <= ESP_LOG_VERBOSE; level++)
+    {
+        if (memcmp(level_str, s_log_level_names[level], level_len) == 0)
+        {
             break;
         }
     }
-    if (level > ESP_LOG_VERBOSE) {
+    if (level > ESP_LOG_VERBOSE)
+    {
         printf("Invalid log level '%s', choose from none|error|warn|info|debug|verbose\n", level_str);
         return 1;
     }
-    if (level > CONFIG_LOG_MAXIMUM_LEVEL) {
+    if (level > CONFIG_LOG_MAXIMUM_LEVEL)
+    {
         printf("Can't set log level to %s, max level limited in menuconfig to %s. "
                "Please increase CONFIG_LOG_MAXIMUM_LEVEL in menuconfig.\n",
                s_log_level_names[level], s_log_level_names[CONFIG_LOG_MAXIMUM_LEVEL]);
@@ -274,7 +280,6 @@ static void register_log_level(void)
         .help = "Set log level for all tags or a specific tag.",
         .hint = NULL,
         .func = &log_level,
-        .argtable = &log_level_args
-    };
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+        .argtable = &log_level_args};
+    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
