@@ -417,11 +417,18 @@ static void handle_power_key_double_click(void)
 
 static void handle_power_key_long_press(void)
 {
+    ESP_LOGI(TAG, "==== already here====");
+
     if (s_cfg.power_off) {
         s_cfg.power_off();
     } else {
         BoardPower_VBAT_OFF();
     }
+
+    
+
+    
+        
 }
 
 static void handle_boot_key_click(void)

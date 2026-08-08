@@ -178,8 +178,36 @@ static void app_show_container(int container_number)
     show_container(container_number);
 }
 
+
+
 static void app_power_off(void)
 {
+    while (!Lvgl_lock(500))
+    {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        ESP_LOGI(TAG, "try again to lock lvgl for power off");
+    }
+    ESP_LOGI(TAG, "Got lvgl lock for power off");
+
+    // make all containers hidden first
+    lv_obj_add_flag(scr_ui.container_temp_chart, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(scr_ui.container_image, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(scr_ui.container_setting, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(scr_ui.container_home, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_add_flag(scr_ui.label_home_main_info, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(scr_ui.label_home_header, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(scr_ui.label_home_header, "PowerOff");
+    ESP_LOGI(TAG, "delay for poweroff");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    Lvgl_unlock();
+    // delete lvgl task
+    if (s_lvgl_loop_task != NULL)
+    {
+        vTaskDelete(s_lvgl_loop_task);
+        s_lvgl_loop_task = NULL;
+    }
     BoardPower_VBAT_OFF();
 }
 
@@ -291,7 +319,7 @@ void Task_led_loop(void *arg)
         }
     }
 }
-
+    
 
 void Task_lvgl_loop(void *arg)
 {
@@ -319,6 +347,7 @@ void Task_lvgl_loop(void *arg)
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
+
 
         // if (!Lvgl_lock(500))
         if (!Lvgl_lock(portMAX_DELAY))
