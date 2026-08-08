@@ -323,16 +323,6 @@ void Task_led_loop(void *arg)
 
 void Task_lvgl_loop(void *arg)
 {
-    // use current time as system time
-    // pcf85063a_datetime_t datatime = {};
-    // datatime.year = 2026;
-    // datatime.month = 5;
-    // datatime.day = 31;
-    // datatime.hour = 15;
-    // datatime.min = 54;
-    // datatime.sec = 0;
-    // pcf85063a_set_time_date(&pcf85063, datatime);
-
     pcf85063a_datetime_t current_time = {};
     pcf85063a_get_time_date(&pcf85063, &current_time);
 
@@ -348,8 +338,6 @@ void Task_lvgl_loop(void *arg)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
 
-
-        // if (!Lvgl_lock(500))
         if (!Lvgl_lock(portMAX_DELAY))
         {
             continue;

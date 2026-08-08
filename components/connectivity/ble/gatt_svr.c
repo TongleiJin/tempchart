@@ -14,6 +14,8 @@
 #include "gatt_svr.h"
 #include "modlog/modlog.h"
 #include "user_app.h"
+#include "port_rtc.h"
+#include <time.h>
 
 static const char *TAG = "gatt_svr";
 
@@ -214,6 +216,78 @@ int gatt_svr_notify_tick(uint16_t conn_handle)
     return 0;
 }
 
+
+
+// ble command string like this: sy=2026:sm=08:sd=08:, or like this: sh=18:sm=06:ss=30:
+uint8_t pick_first_cmd(const char *cmdstr, char *key, uint16_t *val)
+{
+    char tmpbuf[64];
+    if (!cmdstr || !key || !val) {
+        return 0;
+    }
+
+    strcpy(tmpbuf, cmdstr);
+
+    char *value_start = strchr(tmpbuf, '=');
+    if (!value_start) {
+        return 0;
+    }
+    *value_start = '\0'; // terminate key
+    value_start++; // move to value
+
+    char *value_end = strchr(value_start, ':');
+    if (!value_end) {
+        return 0;
+    }
+    *value_end = '\0'; // terminate value
+    
+    strcpy(key, tmpbuf);
+    *val = (uint16_t)atoi(value_start);
+
+    return 1;
+}
+
+
+
+// parse commands from ble cmdstr, which is text
+// ble command string like this: sy=2026:sm=08:sd=08:, or like this: sh=18:sm=06:ss=30:
+void do_ble_cmd(const char *cmdstr, uint16_t len){
+    const char *p = cmdstr;
+    char key[16];
+    uint16_t val;
+    struct tm rtc_time = {};
+
+    PortRtc_GetLocalTime(&rtc_time);
+    gatt_svr_log_rx_hex((const uint8_t *)cmdstr, len);
+
+    while (pick_first_cmd(p, key, &val)) {
+        ESP_LOGI(TAG, "BLE CMD: %s=%d", key, val);
+
+        if (strcmp(key, "sy") == 0) {
+            rtc_time.tm_year = val - 1900;
+        } else if (strcmp(key, "sm") == 0) {
+            rtc_time.tm_mon = val - 1;
+        } else if (strcmp(key, "sd") == 0) {
+            rtc_time.tm_mday = val;
+        } else if (strcmp(key, "sh") == 0) {
+            rtc_time.tm_hour = val;
+        } else if (strcmp(key, "sm") == 0) {
+            rtc_time.tm_min = val;
+        } else if (strcmp(key, "ss") == 0) {
+            rtc_time.tm_sec = val;
+        }
+        // move to next command
+        p = strchr(p, ':');
+        if (!p) {
+            break;
+        }
+        p++; // skip ':'
+    }
+    // do set rtc time
+    PortRtc_SetLocalTime(&rtc_time);
+}
+
+
 static int gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
                            struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
@@ -254,8 +328,8 @@ static int gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
                 ESP_LOGE(TAG, "RX mbuf flatten failed: %d", rc);
                 return BLE_ATT_ERR_UNLIKELY;
             }
+            do_ble_cmd((char *)buf, len);
 
-            gatt_svr_log_rx_hex(buf, len);
             return 0;
         }
         break;

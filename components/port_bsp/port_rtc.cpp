@@ -93,3 +93,54 @@ esp_err_t PortRtc_SetLocalTime(const struct tm *time)
     pcf85063a_datetime_t rtc_time = tm_to_rtc(time);
     return pcf85063a_set_time_date(&s_rtc, rtc_time);
 }
+
+// set date only to rtc, keep time unchanged
+esp_err_t PortRtc_SetLocalDate(const struct tm *date)
+{
+    if (date == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret = ensure_rtc_ready();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    pcf85063a_datetime_t rtc_time = {};
+    ret = pcf85063a_get_time_date(&s_rtc, &rtc_time);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    rtc_time.year = (uint16_t)(date->tm_year + 1900);
+    rtc_time.month = (uint8_t)(date->tm_mon + 1);
+    rtc_time.day = (uint8_t)date->tm_mday;
+    rtc_time.dotw = (uint8_t)date->tm_wday;
+
+    return pcf85063a_set_time_date(&s_rtc, rtc_time);
+}
+
+// set time only to rtc, keep date unchanged
+esp_err_t PortRtc_SetLocalTimeOnly(const struct tm *time)
+{
+    if (time == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret = ensure_rtc_ready();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    pcf85063a_datetime_t rtc_time = {};
+    ret = pcf85063a_get_time_date(&s_rtc, &rtc_time);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    rtc_time.hour = (uint8_t)time->tm_hour;
+    rtc_time.min = (uint8_t)time->tm_min;
+    rtc_time.sec = (uint8_t)time->tm_sec;
+
+    return pcf85063a_set_time_date(&s_rtc, rtc_time);
+}   
