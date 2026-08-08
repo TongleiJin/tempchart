@@ -60,22 +60,9 @@ void home_view_update_main_info(void)
 
     char buf[512] = "";
     if (*s_cfg.overall_info_page == 1) {
-        uint32_t active_s = input_handler_get_active_sample_period_ms() / 1000;
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "Sample period: %lu", active_s);
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nCount: %lu", temp_sampler_get_count());
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp offset: %u", chart_controller_get_temp_offset());
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp scaler: %u", chart_controller_get_temp_scaler());
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nChart size: %lu", chart_controller_get_point_count());
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nSensor Src: %s",
-                 temp_sampler_get_sensor_source_name(temp_sampler_get_sensor_source()));
 
-        float t = 0.0f;
-        float h = 0.0f;
-        if (temp_sampler_read(&t, &h)) {
-            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: %.1f°C\nHum: %.1f%%", t, h);
-        } else {
-            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "\nTemp: --°C\nHum: --%%");
-        }
+        device_status_format_system_info1(buf, sizeof(buf));
+
     } else {
         device_status_format_system_info(buf, sizeof(buf));
     }
